@@ -1,11 +1,52 @@
 /*
-# Player-managed fighters and event pacing
+# Fix championship belts staying vacant
 
-- Player gym fighters (gym_id IS NOT NULL) no longer appear in random sim fights or
-  auto-generated title bouts; they only fight when booked via an accepted offer.
-- AI promotions schedule roughly one event per in-game month (4 ticks), not every 1-3 weeks.
-- Fight offers target upcoming monthly cards.
+Migration 0016 skipped title fights whenever any fight existed for a weight class
+on the card. Regular bouts ran first, blocking title bouts and preventing
+current_champion_fighter_id from being set.
 */
+
+UPDATE public.championships c
+SET current_champion_fighter_id = sub.winner_id
+FROM (
+  SELECT DISTINCT ON (f.championship_id)
+    f.championship_id,
+    f.winner_id
+  FROM public.fights f
+  WHERE f.is_title_fight = true
+    AND f.status = 'completed'
+    AND f.championship_id IS NOT NULL
+    AND f.winner_id IS NOT NULL
+  ORDER BY f.championship_id, f.completed_at_week DESC NULLS LAST, f.id DESC
+) sub
+WHERE c.id = sub.championship_id;
+
+INSERT INTO public.title_history (championship_id, fighter_id, won_at_week, defenses)
+SELECT c.id, c.current_champion_fighter_id, COALESCE(f.completed_at_week, 0), 0
+FROM public.championships c
+JOIN LATERAL (
+  SELECT completed_at_week
+  FROM public.fights
+  WHERE championship_id = c.id
+    AND is_title_fight = true
+    AND status = 'completed'
+    AND winner_id = c.current_champion_fighter_id
+  ORDER BY completed_at_week DESC NULLS LAST, id DESC
+  LIMIT 1
+) f ON true
+WHERE c.current_champion_fighter_id IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM public.title_history th
+    WHERE th.championship_id = c.id
+      AND th.fighter_id = c.current_champion_fighter_id
+      AND th.lost_at_week IS NULL
+  );
+
+UPDATE public.fighters f
+SET career_status = 'champion'
+FROM public.championships c
+WHERE c.current_champion_fighter_id = f.id
+  AND f.career_status IS DISTINCT FROM 'champion';
 
 DROP FUNCTION IF EXISTS public.advance_week();
 
@@ -60,7 +101,6 @@ BEGIN
     RETURN jsonb_build_object('status','paused');
   END IF;
 
-  -- 1 tick = 1 in-game week; 4 weeks/month, 12 months/year = 48 ticks/year
   v_new_tick := v_world.tick_count + 1;
   v_new_year  := floor(v_new_tick / 48) + 1;
   v_new_month := floor((v_new_tick % 48) / 4) + 1;
@@ -73,11 +113,9 @@ BEGIN
       tick_count = v_new_tick, last_tick_at = now()
   WHERE id = 1;
 
-  -- Phase 1: Age fighters each in-game year (every 48 ticks)
   UPDATE public.fighters SET age = age + 1
   WHERE (v_new_tick % 48) = 0 AND retired = false;
 
-  -- Phase 2: Train
   UPDATE public.fighters
   SET
     boxing = GREATEST(1, LEAST(100, boxing + CASE WHEN boxing < potential THEN floor(random() * 2)::int ELSE 0 END)),
@@ -96,7 +134,6 @@ BEGIN
   WHERE retired = false AND (age >= 45 OR (age >= 40 AND current_skill < 55));
   GET DIAGNOSTICS v_retired_count = ROW_COUNT;
 
-  -- Phase 3: Sign unmanaged fighters to AI promotions
   FOR v_promo IN SELECT id, tier FROM public.promotions WHERE owner_kind = 'ai' LOOP
     SELECT count(*) INTO v_count FROM public.fighters
     WHERE promotion_id = v_promo.id AND retired = false;
@@ -118,7 +155,6 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- Phase 4: Generate upcoming events (~1 per in-game month per promotion)
   FOR v_promo IN SELECT id, tier, fan_base, name FROM public.promotions WHERE owner_kind = 'ai' LOOP
     SELECT count(*) INTO v_count FROM public.events
     WHERE promotion_id = v_promo.id AND status = 'scheduled' AND scheduled_week > v_new_tick;
@@ -129,7 +165,6 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- Phase 5: Populate + process due events
   FOR v_events_to_process IN
     SELECT e.id, e.promotion_id, e.name FROM public.events e
     WHERE e.status = 'scheduled' AND e.scheduled_week <= v_new_tick
@@ -137,7 +172,7 @@ BEGIN
     v_events_processed := v_events_processed + 1;
     v_purse_base := (SELECT tier FROM public.promotions WHERE id = v_events_to_process.promotion_id) * 5000;
 
-    -- Title fights (before regular bouts so vacant/defense bouts are not blocked)
+    -- Title fights before regular bouts so belts can be contested on the same card.
     FOR v_champion IN
       SELECT c.id AS champ_id, c.weight_class, c.current_champion_fighter_id AS champ_fighter, c.promotion_id
       FROM public.championships c WHERE c.promotion_id = v_events_to_process.promotion_id
@@ -310,7 +345,6 @@ BEGIN
       END IF;
     END LOOP;
 
-    -- Regular fights (AI roster only; player-managed fighters fight via accepted offers)
     FOR v_wc IN SELECT name FROM public.weight_classes ORDER BY "order" LOOP
       SELECT count(*) INTO v_count FROM public.fights WHERE event_id = v_events_to_process.id AND weight_class = v_wc.name;
       IF v_count > 0 THEN CONTINUE; END IF;
@@ -394,7 +428,6 @@ BEGIN
       v_events_to_process.promotion_id);
   END LOOP;
 
-  -- Phase 6: Recompute rankings
   FOR v_promo IN SELECT id FROM public.promotions LOOP
     FOR v_wc IN SELECT name FROM public.weight_classes ORDER BY "order" LOOP
       v_rank := 1;
@@ -413,7 +446,6 @@ BEGIN
     END LOOP;
   END LOOP;
 
-  -- Phase 7: Generate fight offers for player-managed fighters
   FOR v_gym IN SELECT id, reputation, tier FROM public.gyms LOOP
     FOR v_fighter IN
       SELECT id, weight_class, current_skill FROM public.fighters
@@ -460,14 +492,12 @@ BEGIN
     END LOOP;
   END LOOP;
 
-  -- Phase 8: Gym rankings by reputation
   v_rank := 1;
   FOR v_gym IN SELECT id FROM public.gyms ORDER BY reputation DESC, wins DESC LOOP
     UPDATE public.gyms SET ranking = v_rank WHERE id = v_gym.id;
     v_rank := v_rank + 1;
   END LOOP;
 
-  -- Phase 9: Expire
   UPDATE public.contracts SET status = 'expired' WHERE status = 'active' AND expires_week <= v_new_tick;
   UPDATE public.fighters SET promotion_id = NULL
   WHERE id IN (SELECT fighter_id FROM public.contracts WHERE status = 'expired') AND gym_id IS NULL;
