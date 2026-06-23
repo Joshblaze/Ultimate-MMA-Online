@@ -56,11 +56,13 @@ export function FightOffers() {
   const [area, setArea] = useState<OfferArea>('contracts');
   const [filter, setFilter] = useState<Filter>('pending');
   const [actioning, setActioning] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [result, setResult] = useState<{ offerId: string; status: string; message?: string } | null>(null);
 
   useEffect(() => {
     if (!gym) return;
     setLoading(true);
+    setLoadError(null);
     fetchGymOffers(gym.id)
       .then((data) => {
         const loaded = data as OfferWithRelations[];
@@ -77,9 +79,13 @@ export function FightOffers() {
           setArea('contracts');
         }
       })
-      .catch((e) => console.error('Failed to load offers:', e.message))
+      .catch((e) => {
+        console.error('Failed to load offers:', e.message);
+        setLoadError(e.message);
+        setOffers([]);
+      })
       .finally(() => setLoading(false));
-  }, [gym, world?.tick_count]);
+  }, [gym, world?.tick_count, world?.last_tick_at]);
 
   if (!gym) return null;
 
@@ -143,6 +149,13 @@ export function FightOffers() {
   return (
     <div className="animate-slideUp">
       <PageHeader title="Fight Offers" subtitle="Review and respond to incoming fight offers" icon={FileText} />
+
+      {loadError && (
+        <div className="mb-4 flex items-start gap-2 text-sm text-blood-300 bg-blood-950/50 border border-blood-800/50 rounded-lg p-3">
+          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>Failed to load offers: {loadError}</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-2 mb-4">
         <button

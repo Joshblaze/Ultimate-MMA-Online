@@ -3,8 +3,10 @@
 
 advance_week() previously picked opponents and promotions independently, but
 enforce_offer_promotion_exclusivity requires the opponent to belong to the
-offer promotion. Silent trigger rejections left players with no offers while
-the admin counter still incremented.
+offer promotion. reject_offer_for_booked_fighter also silently dropped inserts
+when the chosen opponent was already booked. Generation now picks promotion
+first, then an unbooked opponent from that roster, and counts only successful
+inserts via RETURNING.
 */
 
 DROP FUNCTION IF EXISTS public.advance_week();
@@ -55,7 +57,7 @@ DECLARE
   v_contender_1 uuid;
   v_contender_2 uuid;
   v_event_has_title_fight boolean;
-  v_row_count int;
+  v_new_offer_id uuid;
 BEGIN
   SELECT * INTO v_world FROM public.world_state WHERE id = 1 FOR UPDATE;
   IF v_world.is_paused THEN
@@ -465,6 +467,14 @@ BEGIN
                   AND f.retired = false
                   AND f.weight_class = v_fighter.weight_class
                   AND ABS(f.current_skill - v_fighter.current_skill) <= 15
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM public.fights pf
+                    JOIN public.events pe ON pe.id = pf.event_id
+                    WHERE pf.status = 'pending'
+                      AND pe.status = 'scheduled'
+                      AND f.id IN (pf.fighter_a_id, pf.fighter_b_id)
+                  )
               )
             ORDER BY random()
             LIMIT 1;
@@ -472,24 +482,33 @@ BEGIN
 
           IF v_promo_offer_id IS NOT NULL THEN
             SELECT id INTO v_opp
-            FROM public.fighters
-            WHERE promotion_id = v_promo_offer_id
-              AND gym_id IS NULL
-              AND weight_class = v_fighter.weight_class
-              AND retired = false
-              AND id <> v_fighter.id
-              AND ABS(current_skill - v_fighter.current_skill) <= 15
+            FROM public.fighters opp
+            WHERE opp.promotion_id = v_promo_offer_id
+              AND opp.gym_id IS NULL
+              AND opp.weight_class = v_fighter.weight_class
+              AND opp.retired = false
+              AND opp.id <> v_fighter.id
+              AND ABS(opp.current_skill - v_fighter.current_skill) <= 15
+              AND NOT EXISTS (
+                SELECT 1
+                FROM public.fights pf
+                JOIN public.events pe ON pe.id = pf.event_id
+                WHERE pf.status = 'pending'
+                  AND pe.status = 'scheduled'
+                  AND opp.id IN (pf.fighter_a_id, pf.fighter_b_id)
+              )
             ORDER BY random()
             LIMIT 1;
 
             IF v_opp IS NOT NULL THEN
               v_purse_base := v_promo_offer_tier * 5000 + GREATEST(0, (v_fighter.current_skill - 50) * 200);
+              v_new_offer_id := NULL;
               INSERT INTO public.fight_offers (gym_id, fighter_id, opponent_fighter_id, promotion_id, event_id,
                 purse, scheduled_week, status, offered_at_week)
               VALUES (v_gym.id, v_fighter.id, v_opp, v_promo_offer_id, NULL,
-                v_purse_base, v_new_tick + 4 + floor(random() * 2)::int, 'pending', v_new_tick);
-              GET DIAGNOSTICS v_row_count = ROW_COUNT;
-              IF v_row_count = 1 THEN
+                v_purse_base, v_new_tick + 4 + floor(random() * 2)::int, 'pending', v_new_tick)
+              RETURNING id INTO v_new_offer_id;
+              IF v_new_offer_id IS NOT NULL THEN
                 v_offers_generated := v_offers_generated + 1;
               END IF;
             END IF;

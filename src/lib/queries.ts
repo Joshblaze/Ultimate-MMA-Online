@@ -87,7 +87,7 @@ export async function fetchGymOffers(gymId: string): Promise<(FightOffer & {
 })[]> {
   const { data, error } = await supabase
     .from('fight_offers')
-    .select('*, fighter:fighters(id, name, weight_class, current_skill, gym_id), opponent_fighter:fighters!fight_offers_opponent_fighter_id_fkey(id, name, weight_class, current_skill, gym_id), promotion:promotions(id, name, tier), event:events(id, name, status, fights(id, fighter_a_id, fighter_b_id, winner_id, method, round, status, completed_at_week))')
+    .select('*, fighter:fighters!fight_offers_fighter_id_fkey(id, name, weight_class, current_skill, gym_id), opponent_fighter:fighters!fight_offers_opponent_fighter_id_fkey(id, name, weight_class, current_skill, gym_id), promotion:promotions(id, name, tier), event:events(id, name, status, fights(id, fighter_a_id, fighter_b_id, winner_id, method, round, status, completed_at_week))')
     .eq('gym_id', gymId)
     .order('offered_at_week', { ascending: false });
   if (error) throw error;
