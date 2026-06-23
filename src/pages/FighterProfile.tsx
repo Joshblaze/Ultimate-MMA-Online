@@ -105,16 +105,16 @@ export function FighterProfile({ params }: PageProps) {
               </div>
 
               <div className="grid grid-cols-2 gap-2 mt-5">
+                <Stat label="Record" value={formatRecord(f.wins, f.losses, f.draws)} />
+                <Stat label="Weight Class" value={f.weight_class} />
                 {statsVisible ? (
                   <>
-                    <Stat label="Record" value={formatRecord(f.wins, f.losses, f.draws)} />
                     <Stat label="KO Wins" value={String(f.ko_wins)} />
                     <Stat label="Submission Wins" value={String(f.sub_wins)} />
                     <Stat label="Decision Wins" value={String(f.dec_wins)} />
                     <Stat label="Current Skill" value={String(f.current_skill)} />
                     <Stat label="Potential" value={String(f.potential)} />
                     <Stat label="Popularity" value={String(f.popularity)} />
-                    <Stat label="Weight Class" value={f.weight_class} />
                   </>
                 ) : (
                   <div className="col-span-2">

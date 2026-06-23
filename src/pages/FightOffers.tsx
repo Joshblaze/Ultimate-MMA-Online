@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { FileText, Check, X, Trophy, Building2, AlertCircle, Swords } from 'lucide-react';
 import { useGym } from '../lib/gym';
+import { useAuth } from '../lib/auth';
 import { Card, EmptyState, PageHeader, Spinner, Badge } from '../components/ui';
+import { HiddenFighterStats } from '../components/HiddenFighterStats';
+import { areFighterStatsVisible } from '../lib/fighters';
 import { fetchGymOffers, callAcceptOffer, callDeclineOffer } from '../lib/queries';
 import { formatMoney, formatTick } from '../lib/format';
 import { PROMOTION_TIER_NAMES, PROMOTION_TIER_COLORS } from '../lib/constants';
@@ -21,7 +24,7 @@ interface OfferWithRelations {
   status: string;
   offered_at_week: number;
   fighter?: { id: string; name: string; weight_class: string };
-  opponent_fighter?: { id: string; name: string; weight_class: string; current_skill: number };
+  opponent_fighter?: { id: string; name: string; weight_class: string; current_skill: number; gym_id?: string | null };
   promotion?: { id: string; name: string; tier: number };
   event?: {
     id: string;
@@ -45,6 +48,7 @@ type OfferArea = 'contracts' | 'fights';
 
 export function FightOffers() {
   const { gym, refresh } = useGym();
+  const { profile } = useAuth();
   const [offers, setOffers] = useState<OfferWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [area, setArea] = useState<OfferArea>('contracts');
@@ -260,7 +264,13 @@ export function FightOffers() {
                       {offer.opponent_fighter?.name || 'Unknown'}
                     </button>
                     <span className="text-ink-500 text-xs">
-                      Skill {offer.opponent_fighter?.current_skill ?? '—'}
+                      {offer.opponent_fighter && areFighterStatsVisible(
+                        offer.opponent_fighter,
+                        gym.id,
+                        profile?.is_admin ?? false
+                      )
+                        ? `Skill ${offer.opponent_fighter.current_skill}`
+                        : <HiddenFighterStats compact />}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 pt-2 border-t border-ink-800">

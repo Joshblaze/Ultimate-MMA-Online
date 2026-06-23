@@ -1,6 +1,7 @@
 import { Trophy } from 'lucide-react';
 import { formatRecord, ratingTier } from '../lib/format';
 import { CAREER_STATUS_COLOR } from '../lib/constants';
+import { areFighterStatsVisible } from '../lib/fighters';
 import type { Fighter } from '../lib/types';
 import { Avatar, Badge, Belt } from './ui';
 import { HiddenFighterStats } from './HiddenFighterStats';
@@ -57,15 +58,13 @@ export function FighterCard({ fighter, onClick, hideStats }: FighterCardProps) {
       </div>
 
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-ink-800">
-        {hideStats ? (
-          <HiddenFighterStats compact />
-        ) : (
-          <>
-            <div className="text-sm font-mono text-ink-200">{formatRecord(fighter.wins, fighter.losses, fighter.draws)}</div>
-            <Badge className={CAREER_STATUS_COLOR[fighter.career_status]}>
-              {fighter.career_status}
-            </Badge>
-          </>
+        <div className="text-sm font-mono text-ink-200">
+          {formatRecord(fighter.wins, fighter.losses, fighter.draws)}
+        </div>
+        {!hideStats && (
+          <Badge className={CAREER_STATUS_COLOR[fighter.career_status]}>
+            {fighter.career_status}
+          </Badge>
         )}
       </div>
     </div>
@@ -104,7 +103,7 @@ export function FighterRow({ fighter, onClick, right, hideStats }: FighterRowPro
       <td className="px-3 py-2 whitespace-nowrap text-sm text-ink-300">{fighter.weight_class}</td>
       <td className="px-3 py-2 whitespace-nowrap text-sm text-ink-300">{fighter.age}</td>
       <td className="px-3 py-2 whitespace-nowrap text-sm font-mono text-ink-200">
-        {hideStats ? <HiddenFighterStats compact /> : formatRecord(fighter.wins, fighter.losses, fighter.draws)}
+        {formatRecord(fighter.wins, fighter.losses, fighter.draws)}
       </td>
       <td className="px-3 py-2 whitespace-nowrap">
         {hideStats ? (
@@ -119,4 +118,20 @@ export function FighterRow({ fighter, onClick, right, hideStats }: FighterRowPro
       {right && <td className="px-3 py-2 whitespace-nowrap text-right">{right}</td>}
     </tr>
   );
+}
+
+export function HiddenSkillCell({
+  fighter,
+  gymId,
+  isAdmin,
+}: {
+  fighter: { gym_id?: string | null; current_skill: number };
+  gymId: string | null | undefined;
+  isAdmin: boolean;
+}) {
+  if (areFighterStatsVisible(fighter, gymId, isAdmin)) {
+    return <span className="font-mono text-ink-200">{fighter.current_skill}</span>;
+  }
+
+  return <HiddenFighterStats compact />;
 }

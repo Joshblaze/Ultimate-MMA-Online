@@ -2,9 +2,12 @@ import { useEffect, useState } from 'react';
 import { ListOrdered } from 'lucide-react';
 import type { PageProps } from '../App';
 import { Card, EmptyState, PageHeader, Spinner } from '../components/ui';
+import { HiddenSkillCell } from '../components/FighterCard';
 import { fetchRankings } from '../lib/queries';
 import { formatRecord } from '../lib/format';
 import { PROMOTION_TIER_NAMES, PROMOTION_TIER_COLORS, WEIGHT_CLASSES } from '../lib/constants';
+import { useGym } from '../lib/gym';
+import { useAuth } from '../lib/auth';
 import { navigate } from '../App';
 import { supabase } from '../lib/supabase';
 import type { Promotion } from '../lib/types';
@@ -13,11 +16,13 @@ interface RankRow {
   id: string;
   weight_class: string;
   rank_position: number;
-  fighter: { id: string; name: string; country: string; wins: number; losses: number; current_skill: number };
+  fighter: { id: string; name: string; country: string; wins: number; losses: number; draws?: number; current_skill: number; gym_id?: string | null };
   promotion?: { id: string; name: string; tier: number };
 }
 
 export function Rankings(_: PageProps) {
+  const { gym } = useGym();
+  const { profile } = useAuth();
   const [promos, setPromos] = useState<Promotion[]>([]);
   const [selectedPromo, setSelectedPromo] = useState<string>('');
   const [wcFilter, setWcFilter] = useState('Flyweight');
@@ -119,8 +124,16 @@ export function Rankings(_: PageProps) {
                   </td>
                   <td className="px-3 py-2 text-ink-100 font-medium">{r.fighter.name}</td>
                   <td className="px-3 py-2 text-ink-300">{r.fighter.country}</td>
-                  <td className="px-3 py-2 text-ink-300 font-mono">{formatRecord(r.fighter.wins, r.fighter.losses)}</td>
-                  <td className="px-3 py-2 font-mono text-ink-200">{r.fighter.current_skill}</td>
+                  <td className="px-3 py-2 text-ink-300 font-mono">
+                    {formatRecord(r.fighter.wins, r.fighter.losses, r.fighter.draws)}
+                  </td>
+                  <td className="px-3 py-2">
+                    <HiddenSkillCell
+                      fighter={r.fighter}
+                      gymId={gym?.id}
+                      isAdmin={profile?.is_admin ?? false}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>

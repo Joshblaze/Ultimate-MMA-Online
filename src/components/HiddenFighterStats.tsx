@@ -7,7 +7,9 @@ interface HiddenFighterStatsProps {
 export function HiddenFighterStats({ compact }: HiddenFighterStatsProps) {
   if (compact) {
     return (
-      <span className="text-sm text-ink-500 italic">Hidden</span>
+      <span className="text-xs text-ink-500 italic" title="Stats are hidden until you scout this fighter.">
+        Hidden — scout to reveal
+      </span>
     );
   }
 

@@ -79,7 +79,7 @@ export async function fetchGymFighters(gymId: string): Promise<Fighter[]> {
 
 export async function fetchGymOffers(gymId: string): Promise<(FightOffer & {
   fighter: Pick<Fighter, 'id' | 'name' | 'weight_class'>;
-  opponent_fighter: Pick<Fighter, 'id' | 'name' | 'weight_class' | 'current_skill'>;
+  opponent_fighter: Pick<Fighter, 'id' | 'name' | 'weight_class' | 'current_skill' | 'gym_id'>;
   promotion: Pick<Promotion, 'id' | 'name' | 'tier'>;
   event: (Pick<GameEvent, 'id' | 'name' | 'status'> & {
     fights: Pick<Fight, 'id' | 'fighter_a_id' | 'fighter_b_id' | 'winner_id' | 'method' | 'round' | 'status' | 'completed_at_week'>[];
@@ -87,7 +87,7 @@ export async function fetchGymOffers(gymId: string): Promise<(FightOffer & {
 })[]> {
   const { data, error } = await supabase
     .from('fight_offers')
-    .select('*, fighter:fighters!fight_offers_fighter_id_fkey(id, name, weight_class), opponent_fighter:fighters!fight_offers_opponent_fighter_id_fkey(id, name, weight_class, current_skill), promotion:promotions(id, name, tier), event:events(id, name, status, fights(id, fighter_a_id, fighter_b_id, winner_id, method, round, status, completed_at_week))')
+    .select('*, fighter:fighters(id, name, weight_class, current_skill, gym_id), opponent_fighter:fighters!fight_offers_opponent_fighter_id_fkey(id, name, weight_class, current_skill, gym_id), promotion:promotions(id, name, tier), event:events(id, name, status, fights(id, fighter_a_id, fighter_b_id, winner_id, method, round, status, completed_at_week))')
     .eq('gym_id', gymId)
     .order('offered_at_week', { ascending: false });
   if (error) throw error;
@@ -144,7 +144,7 @@ export async function fetchPromotion(id: string) {
     .limit(10);
   const rankingsQ = supabase
     .from('rankings')
-    .select('*, fighter:fighters(id, name, wins, losses, current_skill, country)')
+    .select('*, fighter:fighters(id, name, wins, losses, current_skill, country, gym_id)')
     .eq('promotion_id', id)
     .order('weight_class')
     .order('rank_position');
@@ -292,7 +292,7 @@ export async function callAdmin(action: string): Promise<unknown> {
 export async function fetchRankings(promotionId?: string) {
   let q = supabase
     .from('rankings')
-    .select('*, fighter:fighters(id, name, country, wins, losses, current_skill, weight_class, career_status), promotion:promotions(id, name, tier)')
+    .select('*, fighter:fighters(id, name, country, wins, losses, draws, current_skill, weight_class, career_status, gym_id), promotion:promotions(id, name, tier)')
     .order('weight_class')
     .order('rank_position');
   if (promotionId) q = q.eq('promotion_id', promotionId);

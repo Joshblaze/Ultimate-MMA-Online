@@ -146,7 +146,7 @@ export function Scout(_: PageProps) {
                             {f.promotion_id ? 'Promotion contracted' : 'Free agent'}
                           </span>
                           <span className="text-sm font-mono text-ink-500 italic">
-                            Hidden
+                            Hidden — scout to reveal
                           </span>
                           <button
                             onClick={(e) => {
