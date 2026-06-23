@@ -1,0 +1,90 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        ink: {
+          950: '#0a0d12',
+          900: '#0f141b',
+          850: '#141a23',
+          800: '#1a2230',
+          750: '#212a39',
+          700: '#2a3445',
+          600: '#3a4658',
+          500: '#525e72',
+          400: '#7a8599',
+          300: '#a8b1c2',
+          200: '#cdd4e0',
+          100: '#e6ebf2',
+        },
+        gold: {
+          950: '#3a2c08',
+          900: '#4d3a0c',
+          800: '#6b5210',
+          700: '#8a6a14',
+          600: '#a8831a',
+          500: '#c89b1f',
+          400: '#e0b62e',
+          300: '#ecc94b',
+          200: '#f4dd6b',
+          100: '#fbf0a3',
+        },
+        blood: {
+          950: '#2e0808',
+          900: '#3f0c0c',
+          800: '#561010',
+          700: '#751717',
+          600: '#921f1f',
+          500: '#b32828',
+          400: '#d83838',
+          300: '#e85c5c',
+          200: '#f08282',
+          100: '#f7b4b4',
+        },
+        forest: {
+          950: '#06200f',
+          900: '#0a2c16',
+          800: '#0e3a1e',
+          700: '#124c28',
+          600: '#186234',
+          500: '#1f7a42',
+          400: '#2b9d56',
+          300: '#4fc173',
+          200: '#7fd99a',
+          100: '#b1ecc5',
+        },
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['Oswald', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+      },
+      boxShadow: {
+        belt: '0 0 24px -4px rgba(224, 182, 46, 0.5)',
+        card: '0 1px 3px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.04)',
+        'card-2': '0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)',
+      },
+      keyframes: {
+        pulseGlow: {
+          '0%, 100%': { boxShadow: '0 0 0 0 rgba(224, 182, 46, 0.4)' },
+          '50%': { boxShadow: '0 0 0 8px rgba(224, 182, 46, 0)' },
+        },
+        slideUp: {
+          from: { opacity: '0', transform: 'translateY(8px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        fadeIn: {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+      },
+      animation: {
+        pulseGlow: 'pulseGlow 2s ease-in-out infinite',
+        slideUp: 'slideUp 0.3s ease-out',
+        fadeIn: 'fadeIn 0.25s ease-out',
+      },
+    },
+  },
+  plugins: [],
+};
