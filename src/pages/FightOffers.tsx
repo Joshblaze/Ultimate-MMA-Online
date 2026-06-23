@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { FileText, Check, X, Trophy, Building2, AlertCircle, Swords } from 'lucide-react';
 import { useGym } from '../lib/gym';
+import { useWorld } from '../lib/world';
 import { useAuth } from '../lib/auth';
 import { Card, EmptyState, PageHeader, Spinner, Badge } from '../components/ui';
 import { HiddenFighterStats } from '../components/HiddenFighterStats';
@@ -48,6 +49,7 @@ type OfferArea = 'contracts' | 'fights';
 
 export function FightOffers() {
   const { gym, refresh } = useGym();
+  const { world } = useWorld();
   const { profile } = useAuth();
   const [offers, setOffers] = useState<OfferWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,11 +60,26 @@ export function FightOffers() {
 
   useEffect(() => {
     if (!gym) return;
+    setLoading(true);
     fetchGymOffers(gym.id)
-      .then((data) => setOffers(data as OfferWithRelations[]))
+      .then((data) => {
+        const loaded = data as OfferWithRelations[];
+        setOffers(loaded);
+        const pendingContracts = loaded.filter(
+          (o) => (o.offer_kind || 'contract') === 'contract' && o.status === 'pending',
+        ).length;
+        const pendingFights = loaded.filter(
+          (o) => (o.offer_kind || 'contract') === 'fight' && o.status === 'pending',
+        ).length;
+        if (pendingContracts === 0 && pendingFights > 0) {
+          setArea('fights');
+        } else if (pendingFights === 0 && pendingContracts > 0) {
+          setArea('contracts');
+        }
+      })
       .catch((e) => console.error('Failed to load offers:', e.message))
       .finally(() => setLoading(false));
-  }, [gym]);
+  }, [gym, world?.tick_count]);
 
   if (!gym) return null;
 
@@ -119,6 +136,10 @@ export function FightOffers() {
     all: areaOffers.length,
   };
 
+  const otherTabPending = area === 'contracts'
+    ? offers.filter((o) => (o.offer_kind || 'contract') === 'fight' && o.status === 'pending').length
+    : offers.filter((o) => (o.offer_kind || 'contract') === 'contract' && o.status === 'pending').length;
+
   return (
     <div className="animate-slideUp">
       <PageHeader title="Fight Offers" subtitle="Review and respond to incoming fight offers" icon={FileText} />
@@ -139,6 +160,13 @@ export function FightOffers() {
           <span className="text-xs opacity-70 ml-1">({counts.fights})</span>
         </button>
       </div>
+
+      {otherTabPending > 0 && (
+        <div className="mb-4 text-sm text-gold-400">
+          You have {otherTabPending} pending {area === 'contracts' ? 'fight' : 'contract'} offer
+          {otherTabPending === 1 ? '' : 's'} on the other tab.
+        </div>
+      )}
 
       <div className="flex gap-2 mb-4 flex-wrap">
         {(['pending', 'accepted', 'completed', 'declined', 'all'] as Filter[]).map((f) => (
