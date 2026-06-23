@@ -54,6 +54,7 @@ DECLARE
   v_promo_offer_tier int;
   v_contender_1 uuid;
   v_contender_2 uuid;
+  v_event_has_title_fight boolean;
 BEGIN
   SELECT * INTO v_world FROM public.world_state WHERE id = 1 FOR UPDATE;
   IF v_world.is_paused THEN
@@ -137,11 +138,20 @@ BEGIN
     v_events_processed := v_events_processed + 1;
     v_purse_base := (SELECT tier FROM public.promotions WHERE id = v_events_to_process.promotion_id) * 5000;
 
+    v_event_has_title_fight := EXISTS (
+      SELECT 1 FROM public.fights f
+      WHERE f.event_id = v_events_to_process.id AND f.is_title_fight = true
+    );
+
     -- Title fights (before regular bouts so vacant/defense bouts are not blocked)
     FOR v_champion IN
       SELECT c.id AS champ_id, c.weight_class, c.current_champion_fighter_id AS champ_fighter, c.promotion_id
       FROM public.championships c WHERE c.promotion_id = v_events_to_process.promotion_id
     LOOP
+      IF v_event_has_title_fight THEN
+        EXIT;
+      END IF;
+
       v_opp := NULL;
       v_winner_id := NULL;
       v_fighter_a := NULL;
@@ -307,6 +317,8 @@ BEGIN
             v_winner_id, v_champion.promotion_id);
         END IF;
         v_fights_simulated := v_fights_simulated + 1;
+        v_event_has_title_fight := true;
+        EXIT;
       END IF;
     END LOOP;
 

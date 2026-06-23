@@ -1,55 +1,8 @@
 /*
-# Fix championship belts staying vacant
+# Limit each event to one title fight
 
-Migration 0016 skipped title fights whenever any fight existed for a weight class
-on the card. Regular bouts ran first, blocking title bouts and preventing
-current_champion_fighter_id from being set.
-
-Also limits each event to at most one championship bout.
+Each promotion card may include at most one championship bout.
 */
-
-UPDATE public.championships c
-SET current_champion_fighter_id = sub.winner_id
-FROM (
-  SELECT DISTINCT ON (f.championship_id)
-    f.championship_id,
-    f.winner_id
-  FROM public.fights f
-  WHERE f.is_title_fight = true
-    AND f.status = 'completed'
-    AND f.championship_id IS NOT NULL
-    AND f.winner_id IS NOT NULL
-  ORDER BY f.championship_id, f.completed_at_week DESC NULLS LAST, f.id DESC
-) sub
-WHERE c.id = sub.championship_id;
-
-INSERT INTO public.title_history (championship_id, fighter_id, won_at_week, defenses)
-SELECT c.id, c.current_champion_fighter_id, COALESCE(f.completed_at_week, 0), 0
-FROM public.championships c
-JOIN LATERAL (
-  SELECT completed_at_week
-  FROM public.fights
-  WHERE championship_id = c.id
-    AND is_title_fight = true
-    AND status = 'completed'
-    AND winner_id = c.current_champion_fighter_id
-  ORDER BY completed_at_week DESC NULLS LAST, id DESC
-  LIMIT 1
-) f ON true
-WHERE c.current_champion_fighter_id IS NOT NULL
-  AND NOT EXISTS (
-    SELECT 1 FROM public.title_history th
-    WHERE th.championship_id = c.id
-      AND th.fighter_id = c.current_champion_fighter_id
-      AND th.lost_at_week IS NULL
-  );
-
-UPDATE public.fighters f
-SET career_status = 'champion'
-FROM public.championships c
-WHERE c.current_champion_fighter_id = f.id
-  AND f.career_status IS DISTINCT FROM 'champion';
-
 DROP FUNCTION IF EXISTS public.advance_week();
 
 CREATE OR REPLACE FUNCTION public.advance_week()
