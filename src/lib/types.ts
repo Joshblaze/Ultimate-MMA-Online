@@ -31,6 +31,8 @@ export type NewsType =
   | 'upset'
   | 'retirement'
   | 'signing'
+  | 'release'
+  | 'promotion_cut'
   | 'gym_tier'
   | 'event_result'
   | 'title_defense'
