@@ -51,16 +51,7 @@ export function Scout(_: PageProps) {
 
   if (!gym) return null;
 
-  function signCost(f: Fighter): number {
-    return Math.max(2000, (f.current_skill - 40) * 1500);
-  }
-
   async function handleSign(f: Fighter) {
-    const cost = signCost(f);
-    if (gym!.cash < cost) {
-      setSignResult({ fighterId: f.id, status: 'error', message: 'Insufficient cash.' });
-      return;
-    }
     setSigning(f.id);
     setSignResult(null);
     try {
@@ -88,7 +79,7 @@ export function Scout(_: PageProps) {
     <div className="animate-slideUp">
       <PageHeader
         title="Scout"
-        subtitle="Sign unmanaged fighters to your gym, including fighters already contracted to a promotion"
+        subtitle="Browse unmanaged fighters and sign them to your gym. Stats are hidden until you scout a fighter."
         icon={Search}
         action={
           <div className="text-right">
@@ -139,13 +130,11 @@ export function Scout(_: PageProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-800">
-                {filtered.map((f) => {
-                  const cost = signCost(f);
-                  const affordable = gym.cash >= cost;
-                  return (
+                {filtered.map((f) => (
                     <FighterRow
                       key={f.id}
                       fighter={f}
+                      hideStats
                       onClick={() => navigate(`fighter/${f.id}`)}
                       right={
                         <div className="flex items-center gap-2 justify-end">
@@ -156,15 +145,15 @@ export function Scout(_: PageProps) {
                           }`}>
                             {f.promotion_id ? 'Promotion contracted' : 'Free agent'}
                           </span>
-                          <span className={`text-sm font-mono ${affordable ? 'text-gold-300' : 'text-ink-500'}`}>
-                            {formatMoney(cost)}
+                          <span className="text-sm font-mono text-ink-500 italic">
+                            Hidden
                           </span>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleSign(f);
                             }}
-                            disabled={!affordable || signing === f.id}
+                            disabled={signing === f.id}
                             className="btn-primary text-xs px-3 py-1.5"
                           >
                             {signing === f.id ? <Spinner className="w-3 h-3" /> : 'Sign'}
@@ -172,8 +161,7 @@ export function Scout(_: PageProps) {
                         </div>
                       }
                     />
-                  );
-                })}
+                  ))}
               </tbody>
             </table>
             <div className="border-t border-ink-800 p-3 flex items-center justify-between">
