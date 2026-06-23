@@ -8,7 +8,7 @@ import { HiddenFighterStats } from '../components/HiddenFighterStats';
 import { areFighterStatsVisible } from '../lib/fighters';
 import { fetchGymOffers, callAcceptOffer, callDeclineOffer } from '../lib/queries';
 import { formatMoney, formatTick } from '../lib/format';
-import { PROMOTION_TIER_NAMES, PROMOTION_TIER_COLORS } from '../lib/constants';
+import { PROMOTION_TIER_NAMES, PROMOTION_TIER_COLORS, rankPositionBadgeClass } from '../lib/constants';
 import { navigate } from '../App';
 
 interface OfferWithRelations {
@@ -26,6 +26,7 @@ interface OfferWithRelations {
   offered_at_week: number;
   fighter?: { id: string; name: string; weight_class: string };
   opponent_fighter?: { id: string; name: string; weight_class: string; current_skill: number; gym_id?: string | null };
+  opponent_rank?: number | null;
   promotion?: { id: string; name: string; tier: number };
   event?: {
     id: string;
@@ -296,7 +297,7 @@ export function FightOffers() {
                     </button>
                     <span className="text-ink-500 text-xs">{offer.fighter?.weight_class}</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="badge text-ink-400 bg-ink-800 border-ink-700">Opponent</span>
                     <button
                       className="text-ink-200 hover:text-gold-300"
@@ -304,6 +305,11 @@ export function FightOffers() {
                     >
                       {offer.opponent_fighter?.name || 'Unknown'}
                     </button>
+                    {offer.opponent_rank != null && offer.promotion && (
+                      <Badge className={rankPositionBadgeClass(offer.opponent_rank)}>
+                        #{offer.opponent_rank} · {offer.promotion.name}
+                      </Badge>
+                    )}
                     <span className="text-ink-500 text-xs">
                       {offer.opponent_fighter && areFighterStatsVisible(
                         offer.opponent_fighter,

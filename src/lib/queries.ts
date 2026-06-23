@@ -105,6 +105,7 @@ export async function fetchGymOffers(gymId: string): Promise<(FightOffer & {
   fighter: Pick<Fighter, 'id' | 'name' | 'weight_class'>;
   opponent_fighter: Pick<Fighter, 'id' | 'name' | 'weight_class' | 'current_skill' | 'gym_id'>;
   promotion: Pick<Promotion, 'id' | 'name' | 'tier'>;
+  opponent_rank: number | null;
   event: (Pick<GameEvent, 'id' | 'name' | 'status'> & {
     fights: Pick<Fight, 'id' | 'fighter_a_id' | 'fighter_b_id' | 'winner_id' | 'method' | 'round' | 'status' | 'completed_at_week'>[];
   }) | null;
@@ -115,7 +116,27 @@ export async function fetchGymOffers(gymId: string): Promise<(FightOffer & {
     .eq('gym_id', gymId)
     .order('offered_at_week', { ascending: false });
   if (error) throw error;
-  return data || [];
+
+  const offers = data || [];
+  if (offers.length === 0) return [];
+
+  const opponentIds = [...new Set(offers.map((o) => o.opponent_fighter_id))];
+  const { data: rankings, error: rankingsError } = await supabase
+    .from('rankings')
+    .select('fighter_id, promotion_id, rank_position')
+    .in('fighter_id', opponentIds)
+    .lte('rank_position', 15);
+
+  if (rankingsError) throw rankingsError;
+
+  const rankByPromotionAndFighter = new Map(
+    (rankings || []).map((row) => [`${row.promotion_id}:${row.fighter_id}`, row.rank_position as number]),
+  );
+
+  return offers.map((offer) => ({
+    ...offer,
+    opponent_rank: rankByPromotionAndFighter.get(`${offer.promotion_id}:${offer.opponent_fighter_id}`) ?? null,
+  }));
 }
 
 export async function fetchRecentNews(limit = 10): Promise<NewsItem[]> {
