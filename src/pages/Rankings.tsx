@@ -66,7 +66,7 @@ export function Rankings(_: PageProps) {
     <div className="animate-slideUp">
       <PageHeader
         title="Rankings"
-        subtitle="Top 15 per promotion per weight class, ranked by in-promotion win %"
+        subtitle="Top 15 per promotion per weight class — ranked by in-promotion win % only"
         icon={ListOrdered}
       />
 

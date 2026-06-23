@@ -1,127 +1,10 @@
 /*
-# Promotion win-% rankings, top-6 title challengers, ranked contract loyalty
+# Fix champions booked in non-title fights
 
-- Rankings sorted by in-promotion fight win percentage.
-- Title defenses pick a weighted-random challenger from ranks 1–6.
-- Top-15 ranked fighters auto-renew contracts (tier-up offers excepted).
+Non-title matchmaking only excluded champions of the event promotion, but
+enforce_champion_title_fights blocks any current champion from regular bouts.
 */
 
-CREATE OR REPLACE FUNCTION public.promotion_fighter_record(
-  p_fighter_id uuid,
-  p_promotion_id uuid
-)
-RETURNS TABLE (wins int, losses int, draws int, total int, win_pct numeric)
-LANGUAGE sql
-STABLE
-SECURITY DEFINER SET search_path = public
-AS $$
-  SELECT
-    COUNT(*) FILTER (WHERE fi.winner_id = p_fighter_id)::int AS wins,
-    COUNT(*) FILTER (WHERE fi.winner_id IS NOT NULL AND fi.winner_id <> p_fighter_id)::int AS losses,
-    COUNT(*) FILTER (WHERE fi.winner_id IS NULL)::int AS draws,
-    COUNT(*)::int AS total,
-    CASE
-      WHEN COUNT(*) > 0 THEN
-        COUNT(*) FILTER (WHERE fi.winner_id = p_fighter_id)::numeric / COUNT(*)::numeric
-      ELSE 0
-    END AS win_pct
-  FROM public.fights fi
-  JOIN public.events e ON e.id = fi.event_id AND e.promotion_id = p_promotion_id
-  WHERE fi.status = 'completed'
-    AND p_fighter_id IN (fi.fighter_a_id, fi.fighter_b_id);
-$$;
-
-CREATE OR REPLACE FUNCTION public.fighter_is_promotion_ranked(
-  p_fighter_id uuid,
-  p_promotion_id uuid
-)
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER SET search_path = public
-AS $$
-  SELECT EXISTS (
-    SELECT 1
-    FROM public.rankings r
-    JOIN public.fighters f ON f.id = p_fighter_id
-    WHERE r.fighter_id = p_fighter_id
-      AND r.promotion_id = p_promotion_id
-      AND r.weight_class = f.weight_class
-      AND r.rank_position <= 15
-  );
-$$;
-
-CREATE OR REPLACE FUNCTION public.renew_ranked_fighter_contract(
-  p_fighter_id uuid,
-  p_promotion_id uuid,
-  p_tick int
-)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER SET search_path = public
-AS $$
-DECLARE
-  v_contract_id uuid;
-  v_purse bigint;
-BEGIN
-  IF public.fighter_holds_promotion_title(p_fighter_id, p_promotion_id) THEN
-    RETURN;
-  END IF;
-
-  IF NOT public.fighter_is_promotion_ranked(p_fighter_id, p_promotion_id) THEN
-    RETURN;
-  END IF;
-
-  IF EXISTS (
-    SELECT 1 FROM public.contracts c
-    WHERE c.fighter_id = p_fighter_id
-      AND c.promotion_id = p_promotion_id
-      AND c.status = 'active'
-      AND c.fights_remaining > 0
-  ) THEN
-    UPDATE public.fighters
-    SET promotion_id = p_promotion_id
-    WHERE id = p_fighter_id
-      AND promotion_id IS DISTINCT FROM p_promotion_id;
-    RETURN;
-  END IF;
-
-  SELECT c.id INTO v_contract_id
-  FROM public.contracts c
-  WHERE c.fighter_id = p_fighter_id
-    AND c.promotion_id = p_promotion_id
-  ORDER BY c.signed_week DESC, c.id DESC
-  LIMIT 1;
-
-  v_purse := GREATEST(
-    1000,
-    (SELECT tier FROM public.promotions WHERE id = p_promotion_id) * 5000
-  );
-
-  IF v_contract_id IS NULL THEN
-    INSERT INTO public.contracts (
-      fighter_id, promotion_id, signed_week, expires_week,
-      purse_per_fight, status, contracted_fights, fights_remaining
-    ) VALUES (
-      p_fighter_id, p_promotion_id, p_tick, 2147483647,
-      v_purse, 'active', 4, 4
-    );
-  ELSE
-    UPDATE public.contracts
-    SET status = 'active',
-        fights_remaining = 4,
-        contracted_fights = contracted_fights + 4,
-        signed_week = p_tick,
-        purse_per_fight = COALESCE(purse_per_fight, v_purse)
-    WHERE id = v_contract_id;
-  END IF;
-
-  UPDATE public.fighters
-  SET promotion_id = p_promotion_id
-  WHERE id = p_fighter_id
-    AND promotion_id IS DISTINCT FROM p_promotion_id;
-END;
-$$;
 
 CREATE OR REPLACE FUNCTION public.pick_weighted_title_challenger(
   p_promotion_id uuid,
@@ -155,68 +38,6 @@ AS $$
     )
   ORDER BY random() * (7 - r.rank_position) DESC
   LIMIT 1;
-$$;
-
-CREATE OR REPLACE FUNCTION public.consume_promotion_contract_fight()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER SET search_path = public
-AS $$
-DECLARE
-  v_promotion_id uuid;
-  v_tick int;
-  v_fighter_id uuid;
-BEGIN
-  IF NEW.status <> 'completed' THEN
-    RETURN NEW;
-  END IF;
-  IF TG_OP = 'UPDATE' AND OLD.status = 'completed' THEN
-    RETURN NEW;
-  END IF;
-
-  SELECT promotion_id INTO v_promotion_id
-  FROM public.events WHERE id = NEW.event_id;
-
-  SELECT tick_count INTO v_tick FROM public.world_state WHERE id = 1;
-
-  UPDATE public.contracts
-  SET completed_fights = completed_fights + 1,
-      fights_remaining = GREATEST(0, fights_remaining - 1)
-  WHERE status = 'active'
-    AND promotion_id = v_promotion_id
-    AND fighter_id IN (NEW.fighter_a_id, NEW.fighter_b_id);
-
-  FOR v_fighter_id IN
-    SELECT unnest(ARRAY[NEW.fighter_a_id, NEW.fighter_b_id])
-  LOOP
-    IF public.fighter_holds_promotion_title(v_fighter_id, v_promotion_id)
-       AND EXISTS (
-         SELECT 1 FROM public.contracts c
-         WHERE c.fighter_id = v_fighter_id
-           AND c.promotion_id = v_promotion_id
-           AND c.fights_remaining = 0
-       ) THEN
-      PERFORM public.renew_champion_contract(v_fighter_id, v_promotion_id, v_tick);
-    ELSIF public.fighter_is_promotion_ranked(v_fighter_id, v_promotion_id)
-       AND EXISTS (
-         SELECT 1 FROM public.contracts c
-         WHERE c.fighter_id = v_fighter_id
-           AND c.promotion_id = v_promotion_id
-           AND c.fights_remaining = 0
-       ) THEN
-      PERFORM public.renew_ranked_fighter_contract(v_fighter_id, v_promotion_id, v_tick);
-    ELSE
-      UPDATE public.contracts
-      SET status = 'expired'
-      WHERE status = 'active'
-        AND promotion_id = v_promotion_id
-        AND fighter_id = v_fighter_id
-        AND fights_remaining = 0;
-    END IF;
-  END LOOP;
-
-  RETURN NEW;
-END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.enforce_offer_promotion_exclusivity()
@@ -544,48 +365,6 @@ BEGIN
     'purse', v_offer.purse,
     'event_id', v_event_id
   );
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.seed_championships_and_rankings()
-RETURNS int
-LANGUAGE plpgsql
-SECURITY DEFINER SET search_path = public
-AS $$
-DECLARE
-  v_promo RECORD;
-  v_wc RECORD;
-  v_fighter RECORD;
-  v_rank int;
-  v_week int;
-BEGIN
-  v_week := public.get_current_week();
-  FOR v_promo IN SELECT id FROM public.promotions LOOP
-    FOR v_wc IN SELECT name FROM public.weight_classes ORDER BY "order" LOOP
-      INSERT INTO public.championships (promotion_id, weight_class, current_champion_fighter_id)
-      VALUES (v_promo.id, v_wc.name, NULL)
-      ON CONFLICT (promotion_id, weight_class) DO NOTHING;
-
-      v_rank := 1;
-      FOR v_fighter IN
-        SELECT f.id
-        FROM public.fighters f
-        LEFT JOIN LATERAL public.promotion_fighter_record(f.id, v_promo.id) rec ON true
-        WHERE f.weight_class = v_wc.name
-          AND f.retired = false
-          AND (f.promotion_id = v_promo.id OR (f.gym_id IS NULL AND f.promotion_id IS NULL))
-        ORDER BY rec.win_pct DESC, rec.wins DESC, f.current_skill DESC, f.popularity DESC
-        LIMIT 15
-      LOOP
-        INSERT INTO public.rankings (promotion_id, weight_class, fighter_id, rank_position, updated_at_week)
-        VALUES (v_promo.id, v_wc.name, v_fighter.id, v_rank, v_week)
-        ON CONFLICT (promotion_id, weight_class, rank_position)
-        DO UPDATE SET fighter_id = EXCLUDED.fighter_id, updated_at_week = EXCLUDED.updated_at_week;
-        v_rank := v_rank + 1;
-      END LOOP;
-    END LOOP;
-  END LOOP;
-  RETURN 1;
 END;
 $$;
 
@@ -1292,54 +1071,5 @@ BEGIN
     'retired', v_retired_count, 'signed', v_signed_count,
     'events_processed', v_events_processed, 'fights_simulated', v_fights_simulated,
     'offers_generated', v_offers_generated, 'purses_paid', v_total_purses_paid);
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.promotion_ranking_stats(p_promotion_id uuid)
-RETURNS TABLE (
-  fighter_id uuid,
-  promo_wins int,
-  promo_losses int,
-  promo_draws int,
-  promo_total int,
-  promo_win_pct numeric
-)
-LANGUAGE sql
-STABLE
-SECURITY DEFINER SET search_path = public
-AS $$
-  SELECT
-    f.id AS fighter_id,
-    rec.wins AS promo_wins,
-    rec.losses AS promo_losses,
-    rec.draws AS promo_draws,
-    rec.total AS promo_total,
-    rec.win_pct AS promo_win_pct
-  FROM public.fighters f
-  CROSS JOIN LATERAL public.promotion_fighter_record(f.id, p_promotion_id) rec
-  WHERE f.promotion_id = p_promotion_id;
-$$;
-
--- Repair ranked fighters who lost promotion ties when a contract expired.
-DO $$
-DECLARE
-  v_tick int;
-  v_ranked RECORD;
-BEGIN
-  SELECT tick_count INTO v_tick FROM public.world_state WHERE id = 1;
-
-  FOR v_ranked IN
-    SELECT r.fighter_id, r.promotion_id
-    FROM public.rankings r
-    WHERE r.rank_position <= 15
-  LOOP
-    IF NOT public.fighter_holds_promotion_title(v_ranked.fighter_id, v_ranked.promotion_id) THEN
-      PERFORM public.renew_ranked_fighter_contract(
-        v_ranked.fighter_id,
-        v_ranked.promotion_id,
-        COALESCE(v_tick, 0)
-      );
-    END IF;
-  END LOOP;
 END;
 $$;
