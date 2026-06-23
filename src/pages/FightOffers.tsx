@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react';
 import { FileText, Check, X, Trophy, Building2, AlertCircle, Swords } from 'lucide-react';
 import { useGym } from '../lib/gym';
+import { useWorld } from '../lib/world';
+import { useAuth } from '../lib/auth';
 import { Card, EmptyState, PageHeader, Spinner, Badge } from '../components/ui';
+import { HiddenFighterStats } from '../components/HiddenFighterStats';
+import { areFighterStatsVisible } from '../lib/fighters';
 import { fetchGymOffers, callAcceptOffer, callDeclineOffer } from '../lib/queries';
 import { formatMoney, formatTick } from '../lib/format';
-import { PROMOTION_TIER_NAMES, PROMOTION_TIER_COLORS } from '../lib/constants';
+import { PROMOTION_TIER_NAMES, PROMOTION_TIER_COLORS, rankPositionBadgeClass } from '../lib/constants';
 import { navigate } from '../App';
 
 interface OfferWithRelations {
@@ -15,13 +19,14 @@ interface OfferWithRelations {
   promotion_id: string;
   event_id: string | null;
   purse: number;
-  offer_kind: 'contract' | 'fight';
+  offer_kind: 'contract' | 'fight' | 'renewal';
   contract_fights: number;
   scheduled_week: number;
   status: string;
   offered_at_week: number;
   fighter?: { id: string; name: string; weight_class: string };
-  opponent_fighter?: { id: string; name: string; weight_class: string; current_skill: number };
+  opponent_fighter?: { id: string; name: string; weight_class: string; current_skill: number; gym_id?: string | null };
+  opponent_rank?: number | null;
   promotion?: { id: string; name: string; tier: number };
   event?: {
     id: string;
@@ -43,22 +48,49 @@ interface OfferWithRelations {
 type Filter = 'pending' | 'accepted' | 'completed' | 'declined' | 'all';
 type OfferArea = 'contracts' | 'fights';
 
+function isContractAreaOffer(kind: string | undefined) {
+  return kind === 'contract' || kind === 'renewal';
+}
+
 export function FightOffers() {
   const { gym, refresh } = useGym();
+  const { world } = useWorld();
+  const { profile } = useAuth();
   const [offers, setOffers] = useState<OfferWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [area, setArea] = useState<OfferArea>('contracts');
   const [filter, setFilter] = useState<Filter>('pending');
   const [actioning, setActioning] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [result, setResult] = useState<{ offerId: string; status: string; message?: string } | null>(null);
 
   useEffect(() => {
     if (!gym) return;
+    setLoading(true);
+    setLoadError(null);
     fetchGymOffers(gym.id)
-      .then((data) => setOffers(data as OfferWithRelations[]))
-      .catch((e) => console.error('Failed to load offers:', e.message))
+      .then((data) => {
+        const loaded = data as OfferWithRelations[];
+        setOffers(loaded);
+        const pendingContracts = loaded.filter(
+          (o) => isContractAreaOffer(o.offer_kind) && o.status === 'pending',
+        ).length;
+        const pendingFights = loaded.filter(
+          (o) => o.offer_kind === 'fight' && o.status === 'pending',
+        ).length;
+        if (pendingContracts === 0 && pendingFights > 0) {
+          setArea('fights');
+        } else if (pendingFights === 0 && pendingContracts > 0) {
+          setArea('contracts');
+        }
+      })
+      .catch((e) => {
+        console.error('Failed to load offers:', e.message);
+        setLoadError(e.message);
+        setOffers([]);
+      })
       .finally(() => setLoading(false));
-  }, [gym]);
+  }, [gym, world?.tick_count, world?.last_tick_at]);
 
   if (!gym) return null;
 
@@ -97,7 +129,7 @@ export function FightOffers() {
 
   const areaOffers = offers.filter((o) => {
     const kind = o.offer_kind || 'contract';
-    return area === 'contracts' ? kind === 'contract' : kind === 'fight';
+    return area === 'contracts' ? isContractAreaOffer(kind) : kind === 'fight';
   });
 
   const filtered = areaOffers.filter((o) => {
@@ -106,7 +138,7 @@ export function FightOffers() {
   });
 
   const counts = {
-    contracts: offers.filter((o) => (o.offer_kind || 'contract') === 'contract').length,
+    contracts: offers.filter((o) => isContractAreaOffer(o.offer_kind)).length,
     fights: offers.filter((o) => (o.offer_kind || 'contract') === 'fight').length,
     pending: areaOffers.filter((o) => o.status === 'pending').length,
     accepted: areaOffers.filter((o) => o.status === 'accepted').length,
@@ -115,9 +147,20 @@ export function FightOffers() {
     all: areaOffers.length,
   };
 
+  const otherTabPending = area === 'contracts'
+    ? offers.filter((o) => o.offer_kind === 'fight' && o.status === 'pending').length
+    : offers.filter((o) => isContractAreaOffer(o.offer_kind) && o.status === 'pending').length;
+
   return (
     <div className="animate-slideUp">
       <PageHeader title="Fight Offers" subtitle="Review and respond to incoming fight offers" icon={FileText} />
+
+      {loadError && (
+        <div className="mb-4 flex items-start gap-2 text-sm text-blood-300 bg-blood-950/50 border border-blood-800/50 rounded-lg p-3">
+          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>Failed to load offers: {loadError}</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-2 mb-4">
         <button
@@ -135,6 +178,13 @@ export function FightOffers() {
           <span className="text-xs opacity-70 ml-1">({counts.fights})</span>
         </button>
       </div>
+
+      {otherTabPending > 0 && (
+        <div className="mb-4 text-sm text-gold-400">
+          You have {otherTabPending} pending {area === 'contracts' ? 'fight' : 'contract'} offer
+          {otherTabPending === 1 ? '' : 's'} on the other tab.
+        </div>
+      )}
 
       <div className="flex gap-2 mb-4 flex-wrap">
         {(['pending', 'accepted', 'completed', 'declined', 'all'] as Filter[]).map((f) => (
@@ -171,7 +221,9 @@ export function FightOffers() {
             const playerWon = fight?.winner_id === offer.fighter_id;
             const isCompleted = offer.status === 'completed';
             const offerKind = offer.offer_kind || 'contract';
+            const isRenewalOffer = offerKind === 'renewal';
             const isContractOffer = offerKind === 'contract';
+            const isContractAreaOfferCard = isContractAreaOffer(offerKind);
 
             return (
               <Card
@@ -188,7 +240,7 @@ export function FightOffers() {
                         ? <Swords className="w-4 h-4 text-ink-300" />
                         : <Trophy className="w-4 h-4 text-gold-400" />}
                       <span className="font-display font-semibold text-ink-100">
-                        {isCompleted ? 'Fight Result' : isContractOffer ? 'Contract Offer' : formatMoney(offer.purse)}
+                        {isCompleted ? 'Fight Result' : isRenewalOffer ? 'Contract Renewal' : isContractOffer ? 'Contract Offer' : formatMoney(offer.purse)}
                       </span>
                     </div>
                     <Badge className={
@@ -203,7 +255,7 @@ export function FightOffers() {
                   </div>
                   <div className="text-right">
                     <div className="text-xs text-ink-500 uppercase tracking-wide">
-                      {isCompleted ? 'Completed' : isContractOffer ? 'First Fight' : 'Scheduled'}
+                      {isCompleted ? 'Completed' : isContractAreaOfferCard ? 'First Fight' : 'Scheduled'}
                     </div>
                     <div className="text-sm text-ink-200 font-mono">
                       {formatTick(fight?.completed_at_week ?? offer.scheduled_week)}
@@ -251,7 +303,7 @@ export function FightOffers() {
                     </button>
                     <span className="text-ink-500 text-xs">{offer.fighter?.weight_class}</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="badge text-ink-400 bg-ink-800 border-ink-700">Opponent</span>
                     <button
                       className="text-ink-200 hover:text-gold-300"
@@ -259,8 +311,19 @@ export function FightOffers() {
                     >
                       {offer.opponent_fighter?.name || 'Unknown'}
                     </button>
+                    {offer.opponent_rank != null && offer.promotion && (
+                      <Badge className={rankPositionBadgeClass(offer.opponent_rank)}>
+                        #{offer.opponent_rank} · {offer.promotion.name}
+                      </Badge>
+                    )}
                     <span className="text-ink-500 text-xs">
-                      Skill {offer.opponent_fighter?.current_skill ?? '—'}
+                      {offer.opponent_fighter && areFighterStatsVisible(
+                        offer.opponent_fighter,
+                        gym.id,
+                        profile?.is_admin ?? false
+                      )
+                        ? `Skill ${offer.opponent_fighter.current_skill}`
+                        : <HiddenFighterStats compact />}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 pt-2 border-t border-ink-800">
@@ -279,7 +342,13 @@ export function FightOffers() {
                   </div>
                   {offer.status === 'pending' && (
                     <div className="text-xs text-ink-400 bg-ink-900 border border-ink-800 rounded-lg p-2">
-                      {isContractOffer ? (
+                      {isRenewalOffer ? (
+                        <>
+                          Your fighter&apos;s contract with {offer.promotion?.name || 'this promotion'} has ended.
+                          Accept to renew for {offer.contract_fights} fights and book the next bout, or decline to
+                          release them as a free agent.
+                        </>
+                      ) : isContractOffer ? (
                         <>
                           Accepting signs an exclusive {offer.contract_fights}-fight contract with{' '}
                           {offer.promotion?.name || 'this promotion'} and books the first fight.

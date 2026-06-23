@@ -62,7 +62,7 @@ export function Dashboard(_: PageProps) {
     return () => {
       cancelled = true;
     };
-  }, [gym, version]);
+  }, [gym, version, world?.tick_count, world?.last_tick_at]);
 
   if (!gym) return null;
 

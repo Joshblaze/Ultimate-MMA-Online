@@ -3,18 +3,29 @@ import { User, MapPin, Cake, Trophy, Swords, Activity, CalendarDays } from 'luci
 import type { PageProps } from '../App';
 import { Card, CardHeader, EmptyState, PageHeader, Avatar, Belt, Badge } from '../components/ui';
 import { FighterStatBar } from '../components/ui';
+import { HiddenFighterStats } from '../components/HiddenFighterStats';
 import { fetchFighter } from '../lib/queries';
 import { formatRecord, formatTick } from '../lib/format';
 import { CAREER_STATUS_COLOR } from '../lib/constants';
+import { areFighterStatsVisible } from '../lib/fighters';
 import type { Fighter } from '../lib/types';
+import { useGym } from '../lib/gym';
+import { useAuth } from '../lib/auth';
 import { navigate } from '../App';
+import { PromotionRankBadge } from '../components/PromotionRankBadge';
 
 export function FighterProfile({ params }: PageProps) {
+  const { gym } = useGym();
+  const { profile } = useAuth();
   const [data, setData] = useState<{
     fighter: Fighter | null;
     fights: any[];
     upcomingFights: any[];
     contracts: any[];
+    ranking?: {
+      rank_position: number;
+      promotion?: { id: string; name: string; tier: number } | null;
+    } | null;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -54,7 +65,10 @@ export function FighterProfile({ params }: PageProps) {
   const upcomingFights = (data.upcomingFights || []) as any[];
   const contracts = (data.contracts || []) as any[];
   const activeContract = contracts.find((contract: any) => contract.status === 'active');
-  const isChampion = f.career_status === 'champion';
+  const statsVisible = areFighterStatsVisible(f, gym?.id, profile?.is_admin ?? false);
+  const isChampion = statsVisible && f.career_status === 'champion';
+  const ranking = data.ranking;
+  const showRankBadge = statsVisible && ranking && ranking.rank_position <= 15 && ranking.promotion?.name;
 
   return (
     <div className="animate-slideUp">
@@ -63,9 +77,19 @@ export function FighterProfile({ params }: PageProps) {
         subtitle={`${f.weight_class} · ${f.country} · Age ${f.age}`}
         icon={User}
         action={
-          <Badge className={CAREER_STATUS_COLOR[f.career_status]}>
-            {f.career_status}
-          </Badge>
+          statsVisible ? (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {showRankBadge && (
+                <PromotionRankBadge
+                  rankPosition={ranking!.rank_position}
+                  promotionName={ranking!.promotion!.name}
+                />
+              )}
+              <Badge className={CAREER_STATUS_COLOR[f.career_status]}>
+                {f.career_status}
+              </Badge>
+            </div>
+          ) : undefined
         }
       />
 
@@ -97,31 +121,41 @@ export function FighterProfile({ params }: PageProps) {
 
               <div className="grid grid-cols-2 gap-2 mt-5">
                 <Stat label="Record" value={formatRecord(f.wins, f.losses, f.draws)} />
-                <Stat label="KO Wins" value={String(f.ko_wins)} />
-                <Stat label="Submission Wins" value={String(f.sub_wins)} />
-                <Stat label="Decision Wins" value={String(f.dec_wins)} />
-                <Stat label="Current Skill" value={String(f.current_skill)} />
-                <Stat label="Potential" value={String(f.potential)} />
-                <Stat label="Popularity" value={String(f.popularity)} />
                 <Stat label="Weight Class" value={f.weight_class} />
+                {statsVisible ? (
+                  <>
+                    <Stat label="KO Wins" value={String(f.ko_wins)} />
+                    <Stat label="Submission Wins" value={String(f.sub_wins)} />
+                    <Stat label="Decision Wins" value={String(f.dec_wins)} />
+                    <Stat label="Current Skill" value={String(f.current_skill)} />
+                    <Stat label="Potential" value={String(f.potential)} />
+                    <Stat label="Popularity" value={String(f.popularity)} />
+                  </>
+                ) : (
+                  <div className="col-span-2">
+                    <HiddenFighterStats />
+                  </div>
+                )}
               </div>
             </div>
           </Card>
 
           {/* Attributes */}
-          <Card>
-            <CardHeader title="Attributes" icon={Activity} />
-            <div className="p-4 space-y-3">
-              <FighterStatBar label="Boxing" value={f.boxing} />
-              <FighterStatBar label="Kickboxing" value={f.kickboxing} />
-              <FighterStatBar label="Wrestling" value={f.wrestling} />
-              <FighterStatBar label="BJJ" value={f.bjj} />
-              <FighterStatBar label="Cardio" value={f.cardio} />
-              <FighterStatBar label="Chin" value={f.chin} />
-              <FighterStatBar label="Fight IQ" value={f.fight_iq} />
-              <FighterStatBar label="Athleticism" value={f.athleticism} />
-            </div>
-          </Card>
+          {statsVisible && (
+            <Card>
+              <CardHeader title="Attributes" icon={Activity} />
+              <div className="p-4 space-y-3">
+                <FighterStatBar label="Boxing" value={f.boxing} />
+                <FighterStatBar label="Kickboxing" value={f.kickboxing} />
+                <FighterStatBar label="Wrestling" value={f.wrestling} />
+                <FighterStatBar label="BJJ" value={f.bjj} />
+                <FighterStatBar label="Cardio" value={f.cardio} />
+                <FighterStatBar label="Chin" value={f.chin} />
+                <FighterStatBar label="Fight IQ" value={f.fight_iq} />
+                <FighterStatBar label="Athleticism" value={f.athleticism} />
+              </div>
+            </Card>
+          )}
         </div>
 
         {/* Right column: contract + fight history */}
