@@ -12,6 +12,7 @@ import type { Fighter } from '../lib/types';
 import { useGym } from '../lib/gym';
 import { useAuth } from '../lib/auth';
 import { navigate } from '../App';
+import { PromotionRankBadge } from '../components/PromotionRankBadge';
 
 export function FighterProfile({ params }: PageProps) {
   const { gym } = useGym();
@@ -21,6 +22,10 @@ export function FighterProfile({ params }: PageProps) {
     fights: any[];
     upcomingFights: any[];
     contracts: any[];
+    ranking?: {
+      rank_position: number;
+      promotion?: { id: string; name: string; tier: number } | null;
+    } | null;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -62,6 +67,8 @@ export function FighterProfile({ params }: PageProps) {
   const activeContract = contracts.find((contract: any) => contract.status === 'active');
   const statsVisible = areFighterStatsVisible(f, gym?.id, profile?.is_admin ?? false);
   const isChampion = statsVisible && f.career_status === 'champion';
+  const ranking = data.ranking;
+  const showRankBadge = statsVisible && ranking && ranking.rank_position <= 15 && ranking.promotion?.name;
 
   return (
     <div className="animate-slideUp">
@@ -71,9 +78,17 @@ export function FighterProfile({ params }: PageProps) {
         icon={User}
         action={
           statsVisible ? (
-            <Badge className={CAREER_STATUS_COLOR[f.career_status]}>
-              {f.career_status}
-            </Badge>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {showRankBadge && (
+                <PromotionRankBadge
+                  rankPosition={ranking!.rank_position}
+                  promotionName={ranking!.promotion!.name}
+                />
+              )}
+              <Badge className={CAREER_STATUS_COLOR[f.career_status]}>
+                {f.career_status}
+              </Badge>
+            </div>
           ) : undefined
         }
       />

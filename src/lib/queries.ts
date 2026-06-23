@@ -24,7 +24,18 @@ export async function fetchFighter(id: string, options?: { withHistory?: boolean
   if (error) throw error;
   if (!fighter) return null;
 
-  if (!options?.withHistory) return { fighter, fights: [], upcomingFights: [], contracts: [] };
+  const rankingsQ = supabase
+    .from('rankings')
+    .select('rank_position, weight_class, promotion:promotions(id, name, tier)')
+    .eq('fighter_id', id)
+    .lte('rank_position', 15)
+    .order('rank_position');
+
+  if (!options?.withHistory) {
+    const { data: rankings, error: rankingsError } = await rankingsQ;
+    if (rankingsError) throw rankingsError;
+    return { fighter, fights: [], upcomingFights: [], contracts: [], rankings: rankings || [] };
+  }
 
   const fightSelect = '*, event:events(id, name, promotion_id, scheduled_week, completed_at_week), fighter_a:fighters!fights_fighter_a_id_fkey(id, name, country, wins, losses), fighter_b:fighters!fights_fighter_b_id_fkey(id, name, country, wins, losses)';
 
@@ -45,25 +56,38 @@ export async function fetchFighter(id: string, options?: { withHistory?: boolean
 
   const contractsQ = supabase
     .from('contracts')
-    .select('*, promotion:promotions(name, tier)')
+    .select('*, promotion:promotions(id, name, tier)')
     .eq('fighter_id', id)
     .order('signed_week', { ascending: false })
     .limit(5);
 
-  const [fightsRes, upcomingFightsRes, contractsRes] = await Promise.all([
+  const [fightsRes, upcomingFightsRes, contractsRes, rankingsRes] = await Promise.all([
     fightsQ,
     upcomingFightsQ,
     contractsQ,
+    rankingsQ,
   ]);
   if (fightsRes.error) throw fightsRes.error;
   if (upcomingFightsRes.error) throw upcomingFightsRes.error;
   if (contractsRes.error) throw contractsRes.error;
+  if (rankingsRes.error) throw rankingsRes.error;
+
+  const contracts = contractsRes.data || [];
+  const rankings = rankingsRes.data || [];
+  const activeContract = contracts.find((c: { status: string }) => c.status === 'active');
+  const preferredPromotionId = activeContract?.promotion_id ?? fighter.promotion_id;
+  const matchingRank = preferredPromotionId
+    ? rankings.find((r: { promotion?: { id: string } | null }) => r.promotion?.id === preferredPromotionId)
+    : null;
+  const ranking = matchingRank ?? rankings[0] ?? null;
 
   return {
     fighter,
     fights: fightsRes.data || [],
     upcomingFights: upcomingFightsRes.data || [],
-    contracts: contractsRes.data || [],
+    contracts,
+    rankings,
+    ranking,
   };
 }
 
@@ -155,11 +179,33 @@ export async function fetchPromotion(id: string) {
   if (eventsR.error) throw eventsR.error;
   if (rankingsR.error) throw rankingsR.error;
 
+  let stats: Record<string, { promo_wins: number; promo_losses: number; promo_draws: number; promo_total: number; promo_win_pct: number }> = {};
+  const { data: statsData, error: statsError } = await supabase.rpc('promotion_ranking_stats', {
+    p_promotion_id: id,
+  });
+  if (!statsError && statsData) {
+    stats = Object.fromEntries(
+      (statsData as Array<{ fighter_id: string; promo_wins: number; promo_losses: number; promo_draws: number; promo_total: number; promo_win_pct: number }>).map((row) => [
+        row.fighter_id,
+        {
+          promo_wins: row.promo_wins,
+          promo_losses: row.promo_losses,
+          promo_draws: row.promo_draws,
+          promo_total: row.promo_total,
+          promo_win_pct: row.promo_win_pct,
+        },
+      ])
+    );
+  }
+
   return {
     promotion: promoR.data,
     championships: champsR.data || [],
     events: eventsR.data || [],
-    rankings: rankingsR.data || [],
+    rankings: (rankingsR.data || []).map((row: { fighter_id: string }) => ({
+      ...row,
+      promoStats: stats[row.fighter_id] ?? null,
+    })),
   };
 }
 
@@ -298,7 +344,32 @@ export async function fetchRankings(promotionId?: string) {
   if (promotionId) q = q.eq('promotion_id', promotionId);
   const { data, error } = await q;
   if (error) throw error;
-  return data || [];
+
+  let stats: Record<string, { promo_wins: number; promo_losses: number; promo_draws: number; promo_total: number; promo_win_pct: number }> = {};
+  if (promotionId) {
+    const { data: statsData, error: statsError } = await supabase.rpc('promotion_ranking_stats', {
+      p_promotion_id: promotionId,
+    });
+    if (!statsError && statsData) {
+      stats = Object.fromEntries(
+        (statsData as Array<{ fighter_id: string; promo_wins: number; promo_losses: number; promo_draws: number; promo_total: number; promo_win_pct: number }>).map((row) => [
+          row.fighter_id,
+          {
+            promo_wins: row.promo_wins,
+            promo_losses: row.promo_losses,
+            promo_draws: row.promo_draws,
+            promo_total: row.promo_total,
+            promo_win_pct: row.promo_win_pct,
+          },
+        ])
+      );
+    }
+  }
+
+  return (data || []).map((row: { fighter_id: string }) => ({
+    ...row,
+    promoStats: stats[row.fighter_id] ?? null,
+  }));
 }
 
 export type { Fighter, Gym, Promotion, Championship, TitleHistory, Ranking, GameEvent, Fight, Contract, FightOffer, NewsItem };

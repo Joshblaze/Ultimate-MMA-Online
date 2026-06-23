@@ -5,7 +5,7 @@ import { Card, CardHeader, EmptyState, PageHeader, Badge, Spinner, Belt } from '
 import { HiddenSkillCell } from '../components/FighterCard';
 import { fetchPromotion } from '../lib/queries';
 import { formatNumber, formatRecord, formatTick } from '../lib/format';
-import { PROMOTION_TIER_NAMES, PROMOTION_TIER_COLORS } from '../lib/constants';
+import { PROMOTION_TIER_NAMES, PROMOTION_TIER_COLORS, rankPositionTextClass } from '../lib/constants';
 import { useGym } from '../lib/gym';
 import { useAuth } from '../lib/auth';
 import { navigate } from '../App';
@@ -175,16 +175,28 @@ export function PromotionProfile({ params }: PageProps) {
                   <th className="px-3 py-2 text-left font-semibold">Fighter</th>
                   <th className="px-3 py-2 text-left font-semibold">Country</th>
                   <th className="px-3 py-2 text-left font-semibold">Record</th>
+                  <th className="px-3 py-2 text-left font-semibold">Promo Record</th>
+                  <th className="px-3 py-2 text-left font-semibold">Win %</th>
                   <th className="px-3 py-2 text-left font-semibold">Skill</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-800">
                 {rankingsForWc.map((r) => (
                   <tr key={r.id} className="table-row-hover" onClick={() => navigate(`fighter/${r.fighter.id}`)}>
-                    <td className="px-3 py-2 font-mono text-gold-400">#{r.rank_position}</td>
+                    <td className={`px-3 py-2 font-mono font-bold ${rankPositionTextClass(r.rank_position)}`}>#{r.rank_position}</td>
                     <td className="px-3 py-2 text-ink-100 font-medium">{r.fighter.name}</td>
                     <td className="px-3 py-2 text-ink-300">{r.fighter.country}</td>
                     <td className="px-3 py-2 text-ink-300 font-mono">{formatRecord(r.fighter.wins, r.fighter.losses)}</td>
+                    <td className="px-3 py-2 text-ink-300 font-mono">
+                      {r.promoStats && r.promoStats.promo_total > 0
+                        ? formatRecord(r.promoStats.promo_wins, r.promoStats.promo_losses, r.promoStats.promo_draws)
+                        : '—'}
+                    </td>
+                    <td className="px-3 py-2 text-ink-300 font-mono">
+                      {r.promoStats && r.promoStats.promo_total > 0
+                        ? `${Math.round(r.promoStats.promo_win_pct * 100)}%`
+                        : '—'}
+                    </td>
                     <td className="px-3 py-2">
                       <HiddenSkillCell
                         fighter={r.fighter}

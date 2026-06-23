@@ -40,6 +40,20 @@ export const CAREER_STATUS_COLOR: Record<string, string> = {
   retired: 'text-ink-400 bg-ink-800 border-ink-700',
 };
 
+export function rankPositionTextClass(rank: number): string {
+  if (rank === 1) return 'text-gold-400';
+  if (rank <= 3) return 'text-gold-300';
+  if (rank <= 5) return 'text-blue-300';
+  return 'text-ink-400';
+}
+
+export function rankPositionBadgeClass(rank: number): string {
+  if (rank === 1) return 'text-gold-300 bg-gold-700/40 border-gold-600/40';
+  if (rank <= 3) return 'text-gold-200 bg-gold-800/30 border-gold-700/40';
+  if (rank <= 5) return 'text-blue-300 bg-blue-700/40 border-blue-600/40';
+  return 'text-ink-300 bg-ink-700 border-ink-600';
+}
+
 export const FIGHTER_COUNTRIES = [
   'USA', 'Brazil', 'Mexico', 'Canada', 'Ireland', 'England',
   'Russia', 'Dagestan', 'Poland', 'Nigeria', 'Australia',

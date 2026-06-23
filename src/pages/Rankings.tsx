@@ -5,7 +5,7 @@ import { Card, EmptyState, PageHeader, Spinner } from '../components/ui';
 import { HiddenSkillCell } from '../components/FighterCard';
 import { fetchRankings } from '../lib/queries';
 import { formatRecord } from '../lib/format';
-import { PROMOTION_TIER_NAMES, PROMOTION_TIER_COLORS, WEIGHT_CLASSES } from '../lib/constants';
+import { PROMOTION_TIER_NAMES, PROMOTION_TIER_COLORS, WEIGHT_CLASSES, rankPositionTextClass } from '../lib/constants';
 import { useGym } from '../lib/gym';
 import { useAuth } from '../lib/auth';
 import { navigate } from '../App';
@@ -18,6 +18,13 @@ interface RankRow {
   rank_position: number;
   fighter: { id: string; name: string; country: string; wins: number; losses: number; draws?: number; current_skill: number; gym_id?: string | null };
   promotion?: { id: string; name: string; tier: number };
+  promoStats?: {
+    promo_wins: number;
+    promo_losses: number;
+    promo_draws: number;
+    promo_total: number;
+    promo_win_pct: number;
+  } | null;
 }
 
 export function Rankings(_: PageProps) {
@@ -59,7 +66,7 @@ export function Rankings(_: PageProps) {
     <div className="animate-slideUp">
       <PageHeader
         title="Rankings"
-        subtitle="Top 15 per promotion per weight class"
+        subtitle="Top 15 per promotion per weight class, ranked by in-promotion win %"
         icon={ListOrdered}
       />
 
@@ -106,6 +113,8 @@ export function Rankings(_: PageProps) {
                 <th className="px-3 py-2 text-left font-semibold">Fighter</th>
                 <th className="px-3 py-2 text-left font-semibold">Country</th>
                 <th className="px-3 py-2 text-left font-semibold">Record</th>
+                <th className="px-3 py-2 text-left font-semibold">Promo Record</th>
+                <th className="px-3 py-2 text-left font-semibold">Win %</th>
                 <th className="px-3 py-2 text-left font-semibold">Skill</th>
               </tr>
             </thead>
@@ -113,12 +122,7 @@ export function Rankings(_: PageProps) {
               {filtered.sort((a, b) => a.rank_position - b.rank_position).map((r) => (
                 <tr key={r.id} className="table-row-hover" onClick={() => navigate(`fighter/${r.fighter.id}`)}>
                   <td className="px-3 py-2">
-                    <span className={`font-display font-bold text-lg ${
-                      r.rank_position === 1 ? 'text-gold-400' :
-                      r.rank_position <= 3 ? 'text-gold-300' :
-                      r.rank_position <= 5 ? 'text-blue-300' :
-                      'text-ink-400'
-                    }`}>
+                    <span className={`font-display font-bold text-lg ${rankPositionTextClass(r.rank_position)}`}>
                       #{r.rank_position}
                     </span>
                   </td>
@@ -126,6 +130,16 @@ export function Rankings(_: PageProps) {
                   <td className="px-3 py-2 text-ink-300">{r.fighter.country}</td>
                   <td className="px-3 py-2 text-ink-300 font-mono">
                     {formatRecord(r.fighter.wins, r.fighter.losses, r.fighter.draws)}
+                  </td>
+                  <td className="px-3 py-2 text-ink-300 font-mono">
+                    {r.promoStats && r.promoStats.promo_total > 0
+                      ? formatRecord(r.promoStats.promo_wins, r.promoStats.promo_losses, r.promoStats.promo_draws)
+                      : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-ink-300 font-mono">
+                    {r.promoStats && r.promoStats.promo_total > 0
+                      ? `${Math.round(r.promoStats.promo_win_pct * 100)}%`
+                      : '—'}
                   </td>
                   <td className="px-3 py-2">
                     <HiddenSkillCell
