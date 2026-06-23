@@ -24,7 +24,17 @@ interface RankRow {
     promo_draws: number;
     promo_total: number;
     promo_win_pct: number;
+    promo_win_streak: number;
+    promo_loss_streak: number;
+    ranking_score: number;
   } | null;
+}
+
+function formatStreak(stats: RankRow['promoStats']): string {
+  if (!stats || stats.promo_total === 0) return '—';
+  if (stats.promo_win_streak > 0) return `W${stats.promo_win_streak}`;
+  if (stats.promo_loss_streak > 0) return `L${stats.promo_loss_streak}`;
+  return '—';
 }
 
 export function Rankings(_: PageProps) {
@@ -66,7 +76,7 @@ export function Rankings(_: PageProps) {
     <div className="animate-slideUp">
       <PageHeader
         title="Rankings"
-        subtitle="Top 15 per promotion per weight class — ranked by in-promotion win % only"
+        subtitle="Top 15 per division — ranked by quality of wins, streak, and prior rank (champions excluded)"
         icon={ListOrdered}
       />
 
@@ -114,6 +124,7 @@ export function Rankings(_: PageProps) {
                 <th className="px-3 py-2 text-left font-semibold">Country</th>
                 <th className="px-3 py-2 text-left font-semibold">Record</th>
                 <th className="px-3 py-2 text-left font-semibold">Promo Record</th>
+                <th className="px-3 py-2 text-left font-semibold">Streak</th>
                 <th className="px-3 py-2 text-left font-semibold">Win %</th>
                 <th className="px-3 py-2 text-left font-semibold">Skill</th>
               </tr>
@@ -135,6 +146,15 @@ export function Rankings(_: PageProps) {
                     {r.promoStats && r.promoStats.promo_total > 0
                       ? formatRecord(r.promoStats.promo_wins, r.promoStats.promo_losses, r.promoStats.promo_draws)
                       : '—'}
+                  </td>
+                  <td className="px-3 py-2 font-mono text-sm">
+                    {r.promoStats?.promo_win_streak ? (
+                      <span className="text-emerald-400">{formatStreak(r.promoStats)}</span>
+                    ) : r.promoStats?.promo_loss_streak ? (
+                      <span className="text-red-400">{formatStreak(r.promoStats)}</span>
+                    ) : (
+                      <span className="text-ink-500">{formatStreak(r.promoStats)}</span>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-ink-300 font-mono">
                     {r.promoStats && r.promoStats.promo_total > 0

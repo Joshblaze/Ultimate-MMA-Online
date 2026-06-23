@@ -200,13 +200,32 @@ export async function fetchPromotion(id: string) {
   if (eventsR.error) throw eventsR.error;
   if (rankingsR.error) throw rankingsR.error;
 
-  let stats: Record<string, { promo_wins: number; promo_losses: number; promo_draws: number; promo_total: number; promo_win_pct: number }> = {};
+  let stats: Record<string, {
+    promo_wins: number;
+    promo_losses: number;
+    promo_draws: number;
+    promo_total: number;
+    promo_win_pct: number;
+    promo_win_streak: number;
+    promo_loss_streak: number;
+    ranking_score: number;
+  }> = {};
   const { data: statsData, error: statsError } = await supabase.rpc('promotion_ranking_stats', {
     p_promotion_id: id,
   });
   if (!statsError && statsData) {
     stats = Object.fromEntries(
-      (statsData as Array<{ fighter_id: string; promo_wins: number; promo_losses: number; promo_draws: number; promo_total: number; promo_win_pct: number }>).map((row) => [
+      (statsData as Array<{
+        fighter_id: string;
+        promo_wins: number;
+        promo_losses: number;
+        promo_draws: number;
+        promo_total: number;
+        promo_win_pct: number;
+        promo_win_streak: number;
+        promo_loss_streak: number;
+        ranking_score: number;
+      }>).map((row) => [
         row.fighter_id,
         {
           promo_wins: row.promo_wins,
@@ -214,6 +233,9 @@ export async function fetchPromotion(id: string) {
           promo_draws: row.promo_draws,
           promo_total: row.promo_total,
           promo_win_pct: row.promo_win_pct,
+          promo_win_streak: row.promo_win_streak,
+          promo_loss_streak: row.promo_loss_streak,
+          ranking_score: row.ranking_score,
         },
       ])
     );
@@ -366,14 +388,33 @@ export async function fetchRankings(promotionId?: string) {
   const { data, error } = await q;
   if (error) throw error;
 
-  let stats: Record<string, { promo_wins: number; promo_losses: number; promo_draws: number; promo_total: number; promo_win_pct: number }> = {};
+  let stats: Record<string, {
+    promo_wins: number;
+    promo_losses: number;
+    promo_draws: number;
+    promo_total: number;
+    promo_win_pct: number;
+    promo_win_streak: number;
+    promo_loss_streak: number;
+    ranking_score: number;
+  }> = {};
   if (promotionId) {
     const { data: statsData, error: statsError } = await supabase.rpc('promotion_ranking_stats', {
       p_promotion_id: promotionId,
     });
     if (!statsError && statsData) {
       stats = Object.fromEntries(
-        (statsData as Array<{ fighter_id: string; promo_wins: number; promo_losses: number; promo_draws: number; promo_total: number; promo_win_pct: number }>).map((row) => [
+        (statsData as Array<{
+          fighter_id: string;
+          promo_wins: number;
+          promo_losses: number;
+          promo_draws: number;
+          promo_total: number;
+          promo_win_pct: number;
+          promo_win_streak: number;
+          promo_loss_streak: number;
+          ranking_score: number;
+        }>).map((row) => [
           row.fighter_id,
           {
             promo_wins: row.promo_wins,
@@ -381,6 +422,9 @@ export async function fetchRankings(promotionId?: string) {
             promo_draws: row.promo_draws,
             promo_total: row.promo_total,
             promo_win_pct: row.promo_win_pct,
+            promo_win_streak: row.promo_win_streak,
+            promo_loss_streak: row.promo_loss_streak,
+            ranking_score: row.ranking_score,
           },
         ])
       );
