@@ -1,11 +1,193 @@
 /*
-# Player-managed fighters and event pacing
+# Chronological promotion event numbering
 
-- Player gym fighters (gym_id IS NOT NULL) no longer appear in random sim fights or
-  auto-generated title bouts; they only fight when booked via an accepted offer.
-- AI promotions schedule roughly one event per in-game month (4 ticks), not every 1-3 weeks.
-- Fight offers target upcoming monthly cards.
+Event names use sequential card numbers per promotion (1, 2, 3, ...) based on
+events held or scheduled, not the in-game week/tick.
 */
+
+CREATE OR REPLACE FUNCTION public.next_promotion_event_number(p_promotion_id uuid)
+RETURNS int
+LANGUAGE sql
+STABLE
+SECURITY DEFINER SET search_path = public
+AS $$
+  SELECT count(*)::int + 1
+  FROM public.events
+  WHERE promotion_id = p_promotion_id;
+$$;
+
+CREATE OR REPLACE FUNCTION public.next_promotion_event_name(p_promotion_id uuid)
+RETURNS text
+LANGUAGE sql
+STABLE
+SECURITY DEFINER SET search_path = public
+AS $$
+  SELECT p.name || ' #' || public.next_promotion_event_number(p.id)
+  FROM public.promotions p
+  WHERE p.id = p_promotion_id;
+$$;
+
+-- Renumber existing events in chronological order per promotion.
+WITH numbered AS (
+  SELECT
+    e.id,
+    p.name AS promo_name,
+    row_number() OVER (
+      PARTITION BY e.promotion_id
+      ORDER BY e.scheduled_week, e.id
+    ) AS event_num
+  FROM public.events e
+  JOIN public.promotions p ON p.id = e.promotion_id
+)
+UPDATE public.events e
+SET name = n.promo_name || ' #' || n.event_num
+FROM numbered n
+WHERE e.id = n.id;
+
+CREATE OR REPLACE FUNCTION public.accept_offer(p_offer_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE
+  v_offer RECORD;
+  v_gym RECORD;
+  v_event_id uuid;
+  v_event_name text;
+  v_contract RECORD;
+  v_contract_fights int;
+  v_has_contract boolean := false;
+BEGIN
+  SELECT * INTO v_offer
+  FROM public.fight_offers WHERE id = p_offer_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('status', 'error', 'message', 'Offer not found.');
+  END IF;
+
+  SELECT * INTO v_gym
+  FROM public.gyms
+  WHERE id = v_offer.gym_id AND owner_id = auth.uid();
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('status', 'error', 'message', 'Offer does not belong to your gym.');
+  END IF;
+
+  IF v_offer.status <> 'pending' THEN
+    RETURN jsonb_build_object('status', 'error', 'message', 'Offer is no longer pending.');
+  END IF;
+
+  SELECT * INTO v_contract
+  FROM public.contracts
+  WHERE fighter_id = v_offer.fighter_id
+    AND status = 'active'
+  ORDER BY signed_week DESC, id DESC
+  LIMIT 1;
+  v_has_contract := FOUND;
+
+  IF v_has_contract AND v_contract.promotion_id <> v_offer.promotion_id THEN
+    RETURN jsonb_build_object(
+      'status', 'error',
+      'message', 'This fighter is exclusively contracted to another promotion.'
+    );
+  END IF;
+
+  IF v_offer.offer_kind = 'fight' AND NOT v_has_contract THEN
+    RETURN jsonb_build_object(
+      'status', 'error',
+      'message', 'This fight offer requires an active promotion contract.'
+    );
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.fighters opponent
+    WHERE opponent.id = v_offer.opponent_fighter_id
+      AND opponent.promotion_id IS DISTINCT FROM v_offer.promotion_id
+  ) THEN
+    RETURN jsonb_build_object(
+      'status', 'error',
+      'message', 'Opponent is not available for this promotion.'
+    );
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.fights f
+    JOIN public.events e ON e.id = f.event_id
+    WHERE f.status = 'pending' AND e.status = 'scheduled'
+      AND (
+        v_offer.fighter_id IN (f.fighter_a_id, f.fighter_b_id)
+        OR v_offer.opponent_fighter_id IN (f.fighter_a_id, f.fighter_b_id)
+      )
+  ) THEN
+    RETURN jsonb_build_object(
+      'status', 'error',
+      'message', 'One of these fighters is already booked for an upcoming fight.'
+    );
+  END IF;
+
+  IF NOT v_has_contract THEN
+    v_contract_fights := v_offer.contract_fights;
+    INSERT INTO public.contracts (
+      fighter_id, promotion_id, signed_week, expires_week,
+      purse_per_fight, status, contracted_fights, fights_remaining
+    ) VALUES (
+      v_offer.fighter_id, v_offer.promotion_id, public.get_current_week(),
+      2147483647, v_offer.purse, 'active', v_contract_fights, v_contract_fights
+    );
+  ELSE
+    v_contract_fights := v_contract.fights_remaining;
+  END IF;
+
+  SELECT e.id, e.name INTO v_event_id, v_event_name
+  FROM public.events e
+  WHERE e.promotion_id = v_offer.promotion_id
+    AND e.scheduled_week = v_offer.scheduled_week
+    AND e.status = 'scheduled'
+  ORDER BY e.id LIMIT 1;
+
+  IF v_event_id IS NULL THEN
+    v_event_name := public.next_promotion_event_name(v_offer.promotion_id);
+    INSERT INTO public.events (promotion_id, name, scheduled_week, status)
+    VALUES (v_offer.promotion_id, v_event_name, v_offer.scheduled_week, 'scheduled')
+    RETURNING id INTO v_event_id;
+  END IF;
+
+  INSERT INTO public.fights
+    (event_id, fighter_a_id, fighter_b_id, weight_class, status)
+  SELECT v_event_id, v_offer.fighter_id, v_offer.opponent_fighter_id,
+         f.weight_class, 'pending'
+  FROM public.fighters f WHERE f.id = v_offer.fighter_id;
+
+  UPDATE public.fight_offers
+  SET status = 'accepted', event_id = v_event_id
+  WHERE id = v_offer.id;
+
+  UPDATE public.fight_offers
+  SET status = 'declined'
+  WHERE fighter_id = v_offer.fighter_id
+    AND status = 'pending'
+    AND id <> v_offer.id;
+
+  UPDATE public.gyms
+  SET cash = cash + v_offer.purse, reputation = reputation + 1
+  WHERE id = v_gym.id;
+
+  RETURN jsonb_build_object(
+    'status', 'ok',
+    'message',
+      CASE
+        WHEN v_offer.offer_kind = 'contract' AND NOT v_has_contract THEN
+          'Contract accepted and first fight booked on ' || v_event_name ||
+          '. Exclusive promotion contract: ' || v_contract_fights || ' fight' ||
+          CASE WHEN v_contract_fights = 1 THEN '' ELSE 's' END || '.'
+        ELSE
+          'Fight booked on ' || v_event_name ||
+          ' under the current promotion contract.'
+      END,
+    'purse', v_offer.purse,
+    'event_id', v_event_id
+  );
+END;
+$$;
 
 DROP FUNCTION IF EXISTS public.advance_week();
 
@@ -60,7 +242,6 @@ BEGIN
     RETURN jsonb_build_object('status','paused');
   END IF;
 
-  -- 1 tick = 1 in-game week; 4 weeks/month, 12 months/year = 48 ticks/year
   v_new_tick := v_world.tick_count + 1;
   v_new_year  := floor(v_new_tick / 48) + 1;
   v_new_month := floor((v_new_tick % 48) / 4) + 1;
@@ -73,11 +254,9 @@ BEGIN
       tick_count = v_new_tick, last_tick_at = now()
   WHERE id = 1;
 
-  -- Phase 1: Age fighters each in-game year (every 48 ticks)
   UPDATE public.fighters SET age = age + 1
   WHERE (v_new_tick % 48) = 0 AND retired = false;
 
-  -- Phase 2: Train
   UPDATE public.fighters
   SET
     boxing = GREATEST(1, LEAST(100, boxing + CASE WHEN boxing < potential THEN floor(random() * 2)::int ELSE 0 END)),
@@ -96,7 +275,6 @@ BEGIN
   WHERE retired = false AND (age >= 45 OR (age >= 40 AND current_skill < 55));
   GET DIAGNOSTICS v_retired_count = ROW_COUNT;
 
-  -- Phase 3: Sign unmanaged fighters to AI promotions
   FOR v_promo IN SELECT id, tier FROM public.promotions WHERE owner_kind = 'ai' LOOP
     SELECT count(*) INTO v_count FROM public.fighters
     WHERE promotion_id = v_promo.id AND retired = false;
@@ -118,7 +296,6 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- Phase 4: Generate upcoming events (~1 per in-game month per promotion)
   FOR v_promo IN SELECT id, tier, fan_base, name FROM public.promotions WHERE owner_kind = 'ai' LOOP
     SELECT count(*) INTO v_count FROM public.events
     WHERE promotion_id = v_promo.id AND status = 'scheduled' AND scheduled_week > v_new_tick;
@@ -129,7 +306,6 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- Phase 5: Populate + process due events
   FOR v_events_to_process IN
     SELECT e.id, e.promotion_id, e.name FROM public.events e
     WHERE e.status = 'scheduled' AND e.scheduled_week <= v_new_tick
@@ -137,7 +313,6 @@ BEGIN
     v_events_processed := v_events_processed + 1;
     v_purse_base := (SELECT tier FROM public.promotions WHERE id = v_events_to_process.promotion_id) * 5000;
 
-    -- Regular fights (AI roster only; player-managed fighters fight via accepted offers)
     FOR v_wc IN SELECT name FROM public.weight_classes ORDER BY "order" LOOP
       SELECT count(*) INTO v_count FROM public.fights WHERE event_id = v_events_to_process.id AND weight_class = v_wc.name;
       IF v_count > 0 THEN CONTINUE; END IF;
@@ -213,7 +388,6 @@ BEGIN
       END IF;
     END LOOP;
 
-    -- Title fights
     FOR v_champion IN
       SELECT c.id AS champ_id, c.weight_class, c.current_champion_fighter_id AS champ_fighter, c.promotion_id
       FROM public.championships c WHERE c.promotion_id = v_events_to_process.promotion_id
@@ -222,7 +396,6 @@ BEGIN
       v_winner_id := NULL;
       v_old_champ_id := v_champion.champ_fighter;
 
-      -- Respect player bookings and avoid duplicate bouts for this weight class.
       IF EXISTS (
         SELECT 1 FROM public.fights
         WHERE event_id = v_events_to_process.id AND weight_class = v_champion.weight_class
@@ -230,7 +403,6 @@ BEGIN
         CONTINUE;
       END IF;
 
-      -- Player-managed champions only defend when booked via an accepted offer.
       IF v_champion.champ_fighter IS NOT NULL AND EXISTS (
         SELECT 1 FROM public.fighters
         WHERE id = v_champion.champ_fighter AND gym_id IS NOT NULL
@@ -367,7 +539,6 @@ BEGIN
       v_events_to_process.promotion_id);
   END LOOP;
 
-  -- Phase 6: Recompute rankings
   FOR v_promo IN SELECT id FROM public.promotions LOOP
     FOR v_wc IN SELECT name FROM public.weight_classes ORDER BY "order" LOOP
       v_rank := 1;
@@ -386,7 +557,6 @@ BEGIN
     END LOOP;
   END LOOP;
 
-  -- Phase 7: Generate fight offers for player-managed fighters
   FOR v_gym IN SELECT id, reputation, tier FROM public.gyms LOOP
     FOR v_fighter IN
       SELECT id, weight_class, current_skill FROM public.fighters
@@ -433,14 +603,12 @@ BEGIN
     END LOOP;
   END LOOP;
 
-  -- Phase 8: Gym rankings by reputation
   v_rank := 1;
   FOR v_gym IN SELECT id FROM public.gyms ORDER BY reputation DESC, wins DESC LOOP
     UPDATE public.gyms SET ranking = v_rank WHERE id = v_gym.id;
     v_rank := v_rank + 1;
   END LOOP;
 
-  -- Phase 9: Expire
   UPDATE public.contracts SET status = 'expired' WHERE status = 'active' AND expires_week <= v_new_tick;
   UPDATE public.fighters SET promotion_id = NULL
   WHERE id IN (SELECT fighter_id FROM public.contracts WHERE status = 'expired') AND gym_id IS NULL;
