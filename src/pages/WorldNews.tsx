@@ -12,6 +12,7 @@ const TYPE_META: Record<string, { icon: React.ComponentType<{ className?: string
   title_vacated: { icon: Crown, color: 'text-ink-400', label: 'Title Vacated' },
   retirement: { icon: Users, color: 'text-ink-400', label: 'Retirement' },
   signing: { icon: Sparkles, color: 'text-forest-300', label: 'Signing' },
+  release: { icon: Users, color: 'text-ink-400', label: 'Release' },
   event_result: { icon: Swords, color: 'text-blood-300', label: 'Event Result' },
   upset: { icon: Swords, color: 'text-blood-300', label: 'Upset' },
   gym_tier: { icon: Trophy, color: 'text-gold-300', label: 'Gym Tier' },

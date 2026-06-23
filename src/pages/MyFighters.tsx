@@ -1,21 +1,25 @@
 import { useEffect, useState } from 'react';
-import { Search, Users } from 'lucide-react';
+import { Search, Users, UserMinus, AlertCircle } from 'lucide-react';
 import { useGym } from '../lib/gym';
 import type { PageProps } from '../App';
-import { Card, EmptyState, PageHeader } from '../components/ui';
+import { Card, EmptyState, PageHeader, Spinner } from '../components/ui';
 import { FighterRow } from '../components/FighterCard';
-import { fetchGymFighters } from '../lib/queries';
+import { callReleaseFighter, fetchGymFighters } from '../lib/queries';
 import { formatRecord } from '../lib/format';
 import type { Fighter } from '../lib/types';
 import { navigate } from '../App';
 import { WEIGHT_CLASSES } from '../lib/constants';
 
 export function MyFighters(_: PageProps) {
-  const { gym, version } = useGym();
+  const { gym, version, bumpVersion } = useGym();
   const [fighters, setFighters] = useState<Fighter[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [wcFilter, setWcFilter] = useState<string>('All');
+  const [releasing, setReleasing] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [releaseError, setReleaseError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!gym) return;
     fetchGymFighters(gym.id)
@@ -23,6 +27,25 @@ export function MyFighters(_: PageProps) {
       .catch((e) => console.error('Failed to load fighters:', e.message))
       .finally(() => setLoading(false));
   }, [gym, version]);
+
+  async function handleRelease(f: Fighter) {
+    setReleasing(f.id);
+    setReleaseError(null);
+    try {
+      const r = await callReleaseFighter(f.id);
+      if (r.status === 'ok') {
+        setFighters((prev) => prev.filter((x) => x.id !== f.id));
+        setConfirmingId(null);
+        bumpVersion();
+      } else {
+        setReleaseError(r.message || 'Failed to release fighter.');
+      }
+    } catch (e) {
+      setReleaseError((e as Error).message);
+    } finally {
+      setReleasing(null);
+    }
+  }
 
   const filtered = fighters.filter((f) => {
     if (wcFilter !== 'All' && f.weight_class !== wcFilter) return false;
@@ -67,6 +90,13 @@ export function MyFighters(_: PageProps) {
         </select>
       </div>
 
+      {releaseError && (
+        <div className="mb-4 flex items-start gap-2 text-sm text-blood-300 bg-blood-950/50 border border-blood-800/50 rounded-lg p-3">
+          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>{releaseError}</span>
+        </div>
+      )}
+
       <Card>
         {loading ? (
           <div className="p-8 text-center text-ink-500 text-sm">Loading fighters...</div>
@@ -103,14 +133,52 @@ export function MyFighters(_: PageProps) {
                     fighter={f}
                     onClick={() => navigate(`fighter/${f.id}`)}
                     right={
-                      <span className={`badge border ${
-                        f.career_status === 'champion' ? 'text-gold-300 bg-gold-700/30 border-gold-600/40' :
-                        f.career_status === 'contender' ? 'text-blue-300 bg-blue-700/30 border-blue-600/40' :
-                        f.career_status === 'veteran' ? 'text-ink-300 bg-ink-700 border-ink-600' :
-                        'text-forest-300 bg-forest-700/30 border-forest-600/40'
-                      }`}>
-                        {f.career_status}
-                      </span>
+                      <div className="flex items-center gap-2 justify-end">
+                        <span className={`badge border ${
+                          f.career_status === 'champion' ? 'text-gold-300 bg-gold-700/30 border-gold-600/40' :
+                          f.career_status === 'contender' ? 'text-blue-300 bg-blue-700/30 border-blue-600/40' :
+                          f.career_status === 'veteran' ? 'text-ink-300 bg-ink-700 border-ink-600' :
+                          'text-forest-300 bg-forest-700/30 border-forest-600/40'
+                        }`}>
+                          {f.career_status}
+                        </span>
+                        {confirmingId === f.id ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRelease(f);
+                              }}
+                              disabled={releasing === f.id}
+                              className="btn-danger text-xs px-2 py-1"
+                            >
+                              {releasing === f.id ? <Spinner className="w-3 h-3" /> : 'Confirm'}
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmingId(null);
+                              }}
+                              disabled={releasing === f.id}
+                              className="btn-secondary text-xs px-2 py-1"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmingId(f.id);
+                              setReleaseError(null);
+                            }}
+                            className="btn-danger text-xs px-2 py-1"
+                            title="Release from your gym"
+                          >
+                            <UserMinus className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
                     }
                   />
                 ))}

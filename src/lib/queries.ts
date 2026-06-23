@@ -332,6 +332,12 @@ export async function callSignFighter(fighterId: string): Promise<{ status: stri
   return data as { status: string; message?: string };
 }
 
+export async function callReleaseFighter(fighterId: string): Promise<{ status: string; message?: string }> {
+  const { data, error } = await supabase.rpc('release_fighter', { p_fighter_id: fighterId } as any);
+  if (error) throw error;
+  return data as { status: string; message?: string };
+}
+
 export async function callAcceptOffer(offerId: string): Promise<{ status: string; message?: string }> {
   const { data, error } = await supabase.rpc('accept_offer', { p_offer_id: offerId } as any);
   if (error) throw error;

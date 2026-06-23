@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { User, MapPin, Cake, Trophy, Swords, Activity, CalendarDays } from 'lucide-react';
+import { User, MapPin, Cake, Trophy, Swords, Activity, CalendarDays, UserMinus, AlertCircle } from 'lucide-react';
 import type { PageProps } from '../App';
-import { Card, CardHeader, EmptyState, PageHeader, Avatar, Belt, Badge } from '../components/ui';
+import { Card, CardHeader, EmptyState, PageHeader, Avatar, Belt, Badge, Spinner } from '../components/ui';
 import { FighterStatBar } from '../components/ui';
 import { HiddenFighterStats } from '../components/HiddenFighterStats';
-import { fetchFighter } from '../lib/queries';
+import { fetchFighter, callReleaseFighter } from '../lib/queries';
 import { formatRecord, formatTick } from '../lib/format';
 import { CAREER_STATUS_COLOR } from '../lib/constants';
 import { areFighterStatsVisible } from '../lib/fighters';
@@ -15,7 +15,7 @@ import { navigate } from '../App';
 import { PromotionRankBadge } from '../components/PromotionRankBadge';
 
 export function FighterProfile({ params }: PageProps) {
-  const { gym } = useGym();
+  const { gym, bumpVersion } = useGym();
   const { profile } = useAuth();
   const [data, setData] = useState<{
     fighter: Fighter | null;
@@ -29,6 +29,9 @@ export function FighterProfile({ params }: PageProps) {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [releasing, setReleasing] = useState(false);
+  const [confirmRelease, setConfirmRelease] = useState(false);
+  const [releaseError, setReleaseError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchFighter(params.id, { withHistory: true })
@@ -67,8 +70,28 @@ export function FighterProfile({ params }: PageProps) {
   const activeContract = contracts.find((contract: any) => contract.status === 'active');
   const statsVisible = areFighterStatsVisible(f, gym?.id, profile?.is_admin ?? false);
   const isChampion = statsVisible && f.career_status === 'champion';
+  const isOwnFighter = !!gym && f.gym_id === gym.id;
   const ranking = data.ranking;
   const showRankBadge = statsVisible && ranking && ranking.rank_position <= 15 && ranking.promotion?.name;
+
+  async function handleRelease() {
+    setReleasing(true);
+    setReleaseError(null);
+    try {
+      const r = await callReleaseFighter(f.id);
+      if (r.status === 'ok') {
+        bumpVersion();
+        navigate('my-fighters');
+      } else {
+        setReleaseError(r.message || 'Failed to release fighter.');
+      }
+    } catch (e) {
+      setReleaseError((e as Error).message);
+    } finally {
+      setReleasing(false);
+      setConfirmRelease(false);
+    }
+  }
 
   return (
     <div className="animate-slideUp">
@@ -77,21 +100,58 @@ export function FighterProfile({ params }: PageProps) {
         subtitle={`${f.weight_class} · ${f.country} · Age ${f.age}`}
         icon={User}
         action={
-          statsVisible ? (
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              {showRankBadge && (
-                <PromotionRankBadge
-                  rankPosition={ranking!.rank_position}
-                  promotionName={ranking!.promotion!.name}
-                />
-              )}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {showRankBadge && (
+              <PromotionRankBadge
+                rankPosition={ranking!.rank_position}
+                promotionName={ranking!.promotion!.name}
+              />
+            )}
+            {statsVisible && (
               <Badge className={CAREER_STATUS_COLOR[f.career_status]}>
                 {f.career_status}
               </Badge>
-            </div>
-          ) : undefined
+            )}
+            {isOwnFighter && (
+              confirmRelease ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleRelease}
+                    disabled={releasing}
+                    className="btn-danger text-xs"
+                  >
+                    {releasing ? <Spinner className="w-3 h-3" /> : 'Confirm release'}
+                  </button>
+                  <button
+                    onClick={() => setConfirmRelease(false)}
+                    disabled={releasing}
+                    className="btn-secondary text-xs"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    setConfirmRelease(true);
+                    setReleaseError(null);
+                  }}
+                  className="btn-danger text-xs"
+                >
+                  <UserMinus className="w-3.5 h-3.5" /> Release
+                </button>
+              )
+            )}
+          </div>
         }
       />
+
+      {releaseError && (
+        <div className="mb-4 flex items-start gap-2 text-sm text-blood-300 bg-blood-950/50 border border-blood-800/50 rounded-lg p-3">
+          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>{releaseError}</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column: profile + attributes */}
