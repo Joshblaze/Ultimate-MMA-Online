@@ -20,7 +20,7 @@ export type FightStatus = 'pending' | 'completed';
 export type EventStatus = 'scheduled' | 'completed';
 
 export type OfferStatus = 'pending' | 'accepted' | 'declined' | 'completed';
-export type OfferKind = 'contract' | 'fight' | 'renewal';
+export type OfferKind = 'contract' | 'fight' | 'renewal' | 'title_shot';
 
 export type PromotionTier = 1 | 2 | 3 | 4 | 5;
 

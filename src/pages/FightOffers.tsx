@@ -19,7 +19,7 @@ interface OfferWithRelations {
   promotion_id: string;
   event_id: string | null;
   purse: number;
-  offer_kind: 'contract' | 'fight' | 'renewal';
+  offer_kind: 'contract' | 'fight' | 'renewal' | 'title_shot';
   contract_fights: number;
   scheduled_week: number;
   status: string;
@@ -52,6 +52,10 @@ function isContractAreaOffer(kind: string | undefined) {
   return kind === 'contract' || kind === 'renewal';
 }
 
+function isFightAreaOffer(kind: string | undefined) {
+  return kind === 'fight' || kind === 'title_shot';
+}
+
 export function FightOffers() {
   const { gym, refresh } = useGym();
   const { world } = useWorld();
@@ -76,7 +80,7 @@ export function FightOffers() {
           (o) => isContractAreaOffer(o.offer_kind) && o.status === 'pending',
         ).length;
         const pendingFights = loaded.filter(
-          (o) => o.offer_kind === 'fight' && o.status === 'pending',
+          (o) => isFightAreaOffer(o.offer_kind) && o.status === 'pending',
         ).length;
         if (pendingContracts === 0 && pendingFights > 0) {
           setArea('fights');
@@ -129,7 +133,7 @@ export function FightOffers() {
 
   const areaOffers = offers.filter((o) => {
     const kind = o.offer_kind || 'contract';
-    return area === 'contracts' ? isContractAreaOffer(kind) : kind === 'fight';
+    return area === 'contracts' ? isContractAreaOffer(kind) : isFightAreaOffer(kind);
   });
 
   const filtered = areaOffers.filter((o) => {
@@ -139,7 +143,7 @@ export function FightOffers() {
 
   const counts = {
     contracts: offers.filter((o) => isContractAreaOffer(o.offer_kind)).length,
-    fights: offers.filter((o) => (o.offer_kind || 'contract') === 'fight').length,
+    fights: offers.filter((o) => isFightAreaOffer(o.offer_kind)).length,
     pending: areaOffers.filter((o) => o.status === 'pending').length,
     accepted: areaOffers.filter((o) => o.status === 'accepted').length,
     completed: areaOffers.filter((o) => o.status === 'completed').length,
@@ -148,7 +152,7 @@ export function FightOffers() {
   };
 
   const otherTabPending = area === 'contracts'
-    ? offers.filter((o) => o.offer_kind === 'fight' && o.status === 'pending').length
+    ? offers.filter((o) => isFightAreaOffer(o.offer_kind) && o.status === 'pending').length
     : offers.filter((o) => isContractAreaOffer(o.offer_kind) && o.status === 'pending').length;
 
   return (
@@ -223,6 +227,7 @@ export function FightOffers() {
             const offerKind = offer.offer_kind || 'contract';
             const isRenewalOffer = offerKind === 'renewal';
             const isContractOffer = offerKind === 'contract';
+            const isTitleShotOffer = offerKind === 'title_shot';
             const isContractAreaOfferCard = isContractAreaOffer(offerKind);
 
             return (
@@ -240,7 +245,7 @@ export function FightOffers() {
                         ? <Swords className="w-4 h-4 text-ink-300" />
                         : <Trophy className="w-4 h-4 text-gold-400" />}
                       <span className="font-display font-semibold text-ink-100">
-                        {isCompleted ? 'Fight Result' : isRenewalOffer ? 'Contract Renewal' : isContractOffer ? 'Contract Offer' : formatMoney(offer.purse)}
+                        {isCompleted ? 'Fight Result' : isTitleShotOffer ? 'Title Shot' : isRenewalOffer ? 'Contract Renewal' : isContractOffer ? 'Contract Offer' : formatMoney(offer.purse)}
                       </span>
                     </div>
                     <Badge className={
@@ -342,7 +347,13 @@ export function FightOffers() {
                   </div>
                   {offer.status === 'pending' && (
                     <div className="text-xs text-ink-400 bg-ink-900 border border-ink-800 rounded-lg p-2">
-                      {isRenewalOffer ? (
+                      {isTitleShotOffer ? (
+                        <>
+                          Your fighter broke into the top 5 and earns a championship shot vs{' '}
+                          {offer.opponent_fighter?.name || 'the champion'}. Accept to book the title fight on{' '}
+                          {offer.promotion?.name || 'this promotion'}.
+                        </>
+                      ) : isRenewalOffer ? (
                         <>
                           Your fighter&apos;s contract with {offer.promotion?.name || 'this promotion'} has ended.
                           Accept to renew for {offer.contract_fights} fights and book the next bout, or decline to
