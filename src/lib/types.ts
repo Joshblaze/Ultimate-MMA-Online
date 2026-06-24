@@ -193,6 +193,7 @@ export interface FightOffer {
   scheduled_week: number; // absolute tick count; display via formatTick
   status: OfferStatus;
   offered_at_week: number; // absolute tick count; display via formatTick
+  response_deadline_week: number; // absolute tick count; display via formatTick
 }
 
 export interface NewsItem {
@@ -284,6 +285,24 @@ export interface Database {
       sign_fighter: { Args: { p_fighter_id: string }; Returns: unknown };
       accept_offer: { Args: { p_offer_id: string }; Returns: unknown };
       decline_offer: { Args: { p_offer_id: string }; Returns: unknown };
+      assign_promotion_owner: { Args: { p_promotion_id: string; p_gym_id: string }; Returns: unknown };
+      create_promotion_event: { Args: { p_name: string; p_scheduled_week: number }; Returns: unknown };
+      add_event_fight: {
+        Args: {
+          p_event_id: string;
+          p_fighter_a_id: string;
+          p_fighter_b_id: string;
+          p_is_title_fight?: boolean;
+          p_purse?: number;
+        };
+        Returns: unknown;
+      };
+      send_contract_offer: {
+        Args: { p_fighter_id: string; p_fights_remaining?: number; p_purse_per_fight?: number };
+        Returns: unknown;
+      };
+      run_event: { Args: { p_event_id: string }; Returns: unknown };
+      get_owned_promotion: { Args: { p_gym_id?: string }; Returns: string | null };
       is_admin: { Args: Record<string, never>; Returns: boolean };
       get_current_week: { Args: Record<string, never>; Returns: number };
       pause_world: { Args: Record<string, never>; Returns: void };

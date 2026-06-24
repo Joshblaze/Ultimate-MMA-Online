@@ -15,7 +15,7 @@ interface OfferWithRelations {
   id: string;
   gym_id: string;
   fighter_id: string;
-  opponent_fighter_id: string;
+  opponent_fighter_id: string | null;
   promotion_id: string;
   event_id: string | null;
   purse: number;
@@ -24,6 +24,7 @@ interface OfferWithRelations {
   scheduled_week: number;
   status: string;
   offered_at_week: number;
+  response_deadline_week: number;
   fighter?: { id: string; name: string; weight_class: string };
   opponent_fighter?: { id: string; name: string; weight_class: string; current_skill: number; gym_id?: string | null };
   opponent_rank?: number | null;
@@ -157,7 +158,7 @@ export function FightOffers() {
 
   return (
     <div className="animate-slideUp">
-      <PageHeader title="Fight Offers" subtitle="Review and respond to incoming fight offers" icon={FileText} />
+      <PageHeader title="Fight Offers" subtitle="Review and respond to promotion offers" icon={FileText} />
 
       {loadError && (
         <div className="mb-4 flex items-start gap-2 text-sm text-blood-300 bg-blood-950/50 border border-blood-800/50 rounded-lg p-3">
@@ -211,7 +212,7 @@ export function FightOffers() {
             icon={FileText}
             title="No offers"
             body={filter === 'pending'
-              ? 'No pending offers. The simulation will generate offers for your fighters as the world progresses — check back after the next tick.'
+              ? 'No pending offers. Your promotion owner will send contract and fight offers when booking events.'
               : `No ${filter} offers.`}
           />
         </Card>
@@ -260,11 +261,20 @@ export function FightOffers() {
                   </div>
                   <div className="text-right">
                     <div className="text-xs text-ink-500 uppercase tracking-wide">
-                      {isCompleted ? 'Completed' : isContractAreaOfferCard ? 'First Fight' : 'Scheduled'}
+                      {isCompleted ? 'Completed' : offer.status === 'pending' ? 'Respond by' : isContractAreaOfferCard ? 'First Fight' : 'Scheduled'}
                     </div>
                     <div className="text-sm text-ink-200 font-mono">
-                      {formatTick(fight?.completed_at_week ?? offer.scheduled_week)}
+                      {formatTick(
+                        fight?.completed_at_week
+                        ?? (offer.status === 'pending' ? offer.response_deadline_week : offer.scheduled_week)
+                      )}
                     </div>
+                    {offer.status === 'pending' && world && (
+                      <div className="text-[10px] text-gold-400 mt-0.5">
+                        {Math.max(0, offer.response_deadline_week - world.tick_count)} week
+                        {Math.max(0, offer.response_deadline_week - world.tick_count) === 1 ? '' : 's'} left
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -310,26 +320,32 @@ export function FightOffers() {
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="badge text-ink-400 bg-ink-800 border-ink-700">Opponent</span>
-                    <button
-                      className="text-ink-200 hover:text-gold-300"
-                      onClick={() => offer.opponent_fighter && navigate(`fighter/${offer.opponent_fighter.id}`)}
-                    >
-                      {offer.opponent_fighter?.name || 'Unknown'}
-                    </button>
-                    {offer.opponent_rank != null && offer.promotion && (
-                      <Badge className={rankPositionBadgeClass(offer.opponent_rank)}>
-                        #{offer.opponent_rank} · {offer.promotion.name}
-                      </Badge>
+                    {offer.opponent_fighter ? (
+                      <>
+                        <button
+                          className="text-ink-200 hover:text-gold-300"
+                          onClick={() => navigate(`fighter/${offer.opponent_fighter!.id}`)}
+                        >
+                          {offer.opponent_fighter.name}
+                        </button>
+                        {offer.opponent_rank != null && offer.promotion && (
+                          <Badge className={rankPositionBadgeClass(offer.opponent_rank)}>
+                            #{offer.opponent_rank} · {offer.promotion.name}
+                          </Badge>
+                        )}
+                        <span className="text-ink-500 text-xs">
+                          {areFighterStatsVisible(
+                            offer.opponent_fighter,
+                            gym.id,
+                            profile?.is_admin ?? false
+                          )
+                            ? `Skill ${offer.opponent_fighter.current_skill}`
+                            : <HiddenFighterStats compact />}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-ink-400 text-sm">Contract only — no opponent yet</span>
                     )}
-                    <span className="text-ink-500 text-xs">
-                      {offer.opponent_fighter && areFighterStatsVisible(
-                        offer.opponent_fighter,
-                        gym.id,
-                        profile?.is_admin ?? false
-                      )
-                        ? `Skill ${offer.opponent_fighter.current_skill}`
-                        : <HiddenFighterStats compact />}
-                    </span>
                   </div>
                   <div className="flex items-center gap-2 pt-2 border-t border-ink-800">
                     <Building2 className="w-3.5 h-3.5 text-ink-500" />
@@ -362,7 +378,8 @@ export function FightOffers() {
                       ) : isContractOffer ? (
                         <>
                           Accepting signs an exclusive {offer.contract_fights}-fight contract with{' '}
-                          {offer.promotion?.name || 'this promotion'} and books the first fight.
+                          {offer.promotion?.name || 'this promotion'}.
+                          {offer.opponent_fighter ? ' The first fight will be booked on acceptance.' : ''}
                         </>
                       ) : (
                         <>

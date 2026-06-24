@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import {
   LayoutDashboard, Dumbbell, Users, Search, FileText, Building2,
   Crown, ListOrdered, CalendarDays, Newspaper, Trophy, Settings,
-  LogOut, Menu, X, Clock, Pause, Play,
+  LogOut, Menu, X, Clock, Pause, Play, Briefcase,
 } from 'lucide-react';
+import { fetchOwnedPromotion } from '../lib/queries';
+import type { Promotion } from '../lib/types';
 import { useAuth } from '../lib/auth';
 import { useGym } from '../lib/gym';
 import { useWorld } from '../lib/world';
@@ -43,15 +45,33 @@ export function AppShell({ currentRoute, navigate, children }: AppShellProps) {
   const { gym } = useGym();
   const { world, tickProgress } = useWorld();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [ownedPromotion, setOwnedPromotion] = useState<Promotion | null>(null);
 
   const activeBase = getActiveBase(currentRoute);
+
+  useEffect(() => {
+    if (!gym) {
+      setOwnedPromotion(null);
+      return;
+    }
+    fetchOwnedPromotion(gym.id)
+      .then(setOwnedPromotion)
+      .catch(() => setOwnedPromotion(null));
+  }, [gym?.id, world?.tick_count]);
 
   useEffect(() => {
     setMobileOpen(false);
   }, [currentRoute]);
 
   const navItems = [
-    ...NAV_ITEMS,
+    ...NAV_ITEMS.map((group) => {
+      if (group.section !== 'Management') return group;
+      const items = [...group.items];
+      if (ownedPromotion) {
+        items.push({ path: 'manage-promotion', label: 'Manage Promotion', icon: Briefcase });
+      }
+      return { ...group, items };
+    }),
     ...(profile?.is_admin
       ? [{ section: 'Admin', items: [{ path: 'admin', label: 'Admin Panel', icon: Settings }] }]
       : []),

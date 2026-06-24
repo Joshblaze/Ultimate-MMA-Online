@@ -8,6 +8,7 @@ import { LoadingScreen } from './components/LoadingScreen';
 import { AuthScreen } from './pages/AuthScreen';
 import { CreateGymScreen } from './pages/CreateGymScreen';
 
+const ManagePromotion = lazy(() => import('./pages/ManagePromotion').then((m) => ({ default: m.ManagePromotion })));
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
 const MyGym = lazy(() => import('./pages/MyGym').then((m) => ({ default: m.MyGym })));
 const MyFighters = lazy(() => import('./pages/MyFighters').then((m) => ({ default: m.MyFighters })));
@@ -43,6 +44,7 @@ const routes: Route[] = [
   { path: 'fighter/:id', component: FighterProfile, requiresGym: true, adminOnly: false },
   { path: 'scout', component: Scout, requiresGym: true, adminOnly: false },
   { path: 'fight-offers', component: FightOffers, requiresGym: true, adminOnly: false },
+  { path: 'manage-promotion', component: ManagePromotion, requiresGym: true, adminOnly: false },
   { path: 'promotions', component: Promotions, requiresGym: true, adminOnly: false },
   { path: 'promotion/:id', component: PromotionProfile, requiresGym: true, adminOnly: false },
   { path: 'championships', component: Championships, requiresGym: true, adminOnly: false },

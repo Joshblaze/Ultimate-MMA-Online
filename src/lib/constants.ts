@@ -80,15 +80,11 @@ export const FIGHTER_LAST_NAMES = [
 ];
 
 export const PROMOTION_NAMES = [
-  { name: 'Kingdom Combat', tier: 1 },
-  { name: 'Iron Cage Federation', tier: 1 },
-  { name: 'Borough Brawl', tier: 2 },
-  { name: 'Pacific Rim MMA', tier: 2 },
-  { name: 'Frontier Fighting', tier: 3 },
-  { name: 'Continental MMA League', tier: 3 },
-  { name: 'Apex Worldwide', tier: 4 },
-  { name: 'Global Apex Championship', tier: 5 },
+  { name: 'Ultimate MMA Championship', tier: 5 },
 ];
+
+export const EVENT_LEAD_WEEKS = 4;
+export const OFFER_RESPONSE_WEEKS = 2;
 
 // 1 real hour = 1 in-game week; 4 weeks/month, 12 months/year
 export const WEEKS_PER_MONTH = 4;

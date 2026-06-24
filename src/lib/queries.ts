@@ -120,7 +120,7 @@ export async function fetchGymOffers(gymId: string): Promise<(FightOffer & {
   const offers = data || [];
   if (offers.length === 0) return [];
 
-  const opponentIds = [...new Set(offers.map((o) => o.opponent_fighter_id))];
+  const opponentIds = [...new Set(offers.map((o) => o.opponent_fighter_id).filter(Boolean))] as string[];
   const { data: rankings, error: rankingsError } = await supabase
     .from('rankings')
     .select('fighter_id, promotion_id, rank_position')
@@ -350,9 +350,114 @@ export async function callDeclineOffer(offerId: string): Promise<{ status: strin
   return data as { status: string; message?: string };
 }
 
+export async function fetchAllGymsForAdmin(): Promise<Gym[]> {
+  const { data, error } = await supabase
+    .from('gyms')
+    .select('id, name, owner_id, tier, reputation, ranking, capacity, cash, wins, losses, draws, champions_produced, created_at')
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function fetchOwnedPromotion(gymId: string): Promise<Promotion | null> {
+  const { data, error } = await supabase
+    .from('promotions')
+    .select('*')
+    .eq('owned_by_gym_id', gymId)
+    .eq('owner_kind', 'player')
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchPromotionEvents(promotionId: string, status?: string) {
+  let q = supabase
+    .from('events')
+    .select('*, fights(id, status, fighter_a_id, fighter_b_id, is_title_fight, fighter_a:fighters!fights_fighter_a_id_fkey(id, name), fighter_b:fighters!fights_fighter_b_id_fkey(id, name))')
+    .eq('promotion_id', promotionId)
+    .order('scheduled_week', { ascending: true });
+  if (status) q = q.eq('status', status);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
+
+export async function fetchEventPendingOffers(eventId: string) {
+  const { data, error } = await supabase
+    .from('fight_offers')
+    .select('id, fighter_id, opponent_fighter_id, status, gym_id, fighter:fighters!fight_offers_fighter_id_fkey(id, name), opponent_fighter:fighters!fight_offers_opponent_fighter_id_fkey(id, name)')
+    .eq('event_id', eventId)
+    .eq('status', 'pending');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function fetchBookableFighters(promotionId: string) {
+  const { data, error } = await supabase
+    .from('fighters')
+    .select('id, name, weight_class, current_skill, gym_id, promotion_id, retired')
+    .eq('retired', false)
+    .order('name');
+  if (error) throw error;
+  return (data || []).filter(
+    (f) => f.promotion_id === null || f.promotion_id === promotionId,
+  );
+}
+
+export async function callCreatePromotionEvent(name: string, scheduledWeek: number) {
+  const { data, error } = await supabase.rpc('create_promotion_event', {
+    p_name: name,
+    p_scheduled_week: scheduledWeek,
+  } as any);
+  if (error) throw error;
+  return data as { status: string; message?: string; event_id?: string };
+}
+
+export async function callAddEventFight(
+  eventId: string,
+  fighterAId: string,
+  fighterBId: string,
+  isTitleFight = false,
+  purse = 5000,
+) {
+  const { data, error } = await supabase.rpc('add_event_fight', {
+    p_event_id: eventId,
+    p_fighter_a_id: fighterAId,
+    p_fighter_b_id: fighterBId,
+    p_is_title_fight: isTitleFight,
+    p_purse: purse,
+  } as any);
+  if (error) throw error;
+  return data as { status: string; message?: string };
+}
+
+export async function callSendContractOffer(
+  fighterId: string,
+  fightsRemaining = 4,
+  pursePerFight = 5000,
+) {
+  const { data, error } = await supabase.rpc('send_contract_offer', {
+    p_fighter_id: fighterId,
+    p_fights_remaining: fightsRemaining,
+    p_purse_per_fight: pursePerFight,
+  } as any);
+  if (error) throw error;
+  return data as { status: string; message?: string; auto_accepted?: boolean };
+}
+
+export async function callRunEvent(eventId: string) {
+  const { data, error } = await supabase.rpc('run_event', { p_event_id: eventId } as any);
+  if (error) throw error;
+  return data as { status: string; message?: string; fights_simulated?: number };
+}
+
+export async function callAdminAssignPromotion(promotionId: string, gymId: string) {
+  return callAdmin('assign_promotion', { promotionId, gymId });
+}
+
 const ADMIN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-control`;
 
-export async function callAdmin(action: string): Promise<unknown> {
+export async function callAdmin(action: string, payload: Record<string, unknown> = {}): Promise<unknown> {
   const { data } = await supabase.auth.getSession();
   const token = data?.session?.access_token;
   if (!token) throw new Error('Not authenticated.');
@@ -363,7 +468,7 @@ export async function callAdmin(action: string): Promise<unknown> {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify({ action }),
+    body: JSON.stringify({ action, ...payload }),
   });
 
   if (!response.ok) {

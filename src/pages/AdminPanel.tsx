@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import type { PageProps } from '../App';
 import { Card, CardHeader, PageHeader, Spinner, Badge, Alert } from '../components/ui';
-import { callAdmin } from '../lib/queries';
+import { callAdmin, fetchAllGymsForAdmin, fetchPromotions } from '../lib/queries';
 import { useWorld } from '../lib/world';
 import { formatDate } from '../lib/format';
 
@@ -16,9 +16,9 @@ const ACTION_META: Record<AdminAction, { label: string; icon: React.ComponentTyp
   pause: { label: 'Pause Simulation', icon: Pause, desc: 'Halts the world simulation. No weekly ticks will occur while paused.' },
   resume: { label: 'Resume Simulation', icon: Play, desc: 'Resumes the world simulation. Weekly ticks continue each hour.' },
   advance: { label: 'Advance One Week', icon: SkipForward, desc: 'Manually advances the world by one week (runs all tick phases immediately).' },
-  reset: { label: 'Reset World to Day 1', icon: RotateCcw, danger: true, desc: 'Wipes all gyms/fighters/promotions/events and regenerates a fresh world. User accounts are preserved.' },
+  reset: { label: 'Reset World to Day 1', icon: RotateCcw, danger: true, desc: 'Wipes all gyms/fighters/promotions/events and regenerates a fresh world with 1 promotion and 100 fighters. User accounts are preserved.' },
   wipe_gyms: { label: 'Wipe All Gyms', icon: Trash2, danger: true, desc: 'Deletes all player gyms and releases their fighters. Does not affect sim state.' },
-  wipe_fighters: { label: 'Wipe All Fighters', icon: Trash2, danger: true, desc: 'Deletes all fighters, contracts, rankings, and clears champions. World will resupply on next tick.' },
+  wipe_fighters: { label: 'Wipe All Fighters', icon: Trash2, danger: true, desc: 'Deletes all fighters, contracts, rankings, and clears champions. Reset world to repopulate the fighter pool.' },
   status: { label: 'Check Status', icon: Clock, desc: 'Refresh the simulation status below.' },
 };
 
@@ -28,6 +28,21 @@ export function AdminPanel(_: PageProps) {
   const [confirming, setConfirming] = useState<AdminAction | null>(null);
   const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
   const [advanceResult, setAdvanceResult] = useState<any>(null);
+  const [gyms, setGyms] = useState<{ id: string; name: string }[]>([]);
+  const [promotions, setPromotions] = useState<{ id: string; name: string; owned_by_gym_id: string | null }[]>([]);
+  const [assignGymId, setAssignGymId] = useState('');
+  const [assignPromoId, setAssignPromoId] = useState('');
+  const [assigning, setAssigning] = useState(false);
+
+  useEffect(() => {
+    Promise.all([fetchAllGymsForAdmin(), fetchPromotions()])
+      .then(([g, p]) => {
+        setGyms(g.map((row) => ({ id: row.id, name: row.name })));
+        setPromotions(p.map((row) => ({ id: row.id, name: row.name, owned_by_gym_id: row.owned_by_gym_id })));
+        if (p.length === 1) setAssignPromoId(p[0].id);
+      })
+      .catch(() => {});
+  }, [world?.tick_count]);
 
   async function runAction(action: AdminAction) {
     if (CONFIRMABLE.includes(action) && confirming !== action) {
@@ -55,10 +70,28 @@ export function AdminPanel(_: PageProps) {
 
   useEffect(() => {
     if (!world) {
-      // initial status fetch — the world context will populate
       callAdmin('status').catch(() => {});
     }
   }, [world]);
+
+  async function handleAssignPromotion() {
+    if (!assignPromoId || !assignGymId) return;
+    setAssigning(true);
+    setMessage(null);
+    try {
+      await callAdmin('assign_promotion', { promotionId: assignPromoId, gymId: assignGymId });
+      setMessage({ kind: 'success', text: 'Promotion owner assigned.' });
+      const p = await fetchPromotions();
+      setPromotions(p.map((row) => ({ id: row.id, name: row.name, owned_by_gym_id: row.owned_by_gym_id })));
+    } catch (e) {
+      setMessage({ kind: 'error', text: (e as Error).message });
+    } finally {
+      setAssigning(false);
+    }
+  }
+
+  const currentOwner = promotions.find((p) => p.id === assignPromoId)?.owned_by_gym_id;
+  const currentOwnerName = gyms.find((g) => g.id === currentOwner)?.name;
 
   return (
     <div className="animate-slideUp">
@@ -119,15 +152,49 @@ export function AdminPanel(_: PageProps) {
           <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             <ResultStat label="New Tick" value={advanceResult.tick} />
             <ResultStat label="Retired" value={advanceResult.retired} />
-            <ResultStat label="Signed" value={advanceResult.signed} />
-            <ResultStat label="Events" value={advanceResult.events_processed} />
-            <ResultStat label="Fights" value={advanceResult.fights_simulated} />
-            <ResultStat label="Offers" value={advanceResult.offers_generated} />
-            <ResultStat label="Purses Paid" value={`$${advanceResult.purses_paid?.toLocaleString()}`} />
             <ResultStat label="Status" value={advanceResult.status} />
           </div>
         </Card>
       )}
+
+      <Card className="mb-6">
+        <CardHeader title="Assign Promotion Owner" icon={Settings} />
+        <div className="p-4 space-y-4">
+          <p className="text-xs text-ink-400">
+            Assign the single game-wide promotion to a gym owner so they can schedule events and send offers.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="label">Promotion</label>
+              <select className="input" value={assignPromoId} onChange={(e) => setAssignPromoId(e.target.value)}>
+                <option value="">Select promotion...</option>
+                {promotions.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Gym Owner</label>
+              <select className="input" value={assignGymId} onChange={(e) => setAssignGymId(e.target.value)}>
+                <option value="">Select gym...</option>
+                {gyms.map((g) => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {currentOwnerName && (
+            <p className="text-sm text-ink-400">Current owner: {currentOwnerName}</p>
+          )}
+          <button
+            onClick={handleAssignPromotion}
+            disabled={assigning || !assignPromoId || !assignGymId}
+            className="btn-primary"
+          >
+            {assigning ? <Spinner /> : 'Assign Owner'}
+          </button>
+        </div>
+      </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {(['resume', 'pause', 'advance', 'wipe_gyms', 'wipe_fighters', 'reset'] as AdminAction[]).map((action) => {

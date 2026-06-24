@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
 };
 
-type Action = 'pause' | 'resume' | 'advance' | 'reset' | 'wipe_gyms' | 'wipe_fighters' | 'status';
+type Action = 'pause' | 'resume' | 'advance' | 'reset' | 'wipe_gyms' | 'wipe_fighters' | 'status' | 'assign_promotion';
 
 interface AdminResult {
   action: Action;
@@ -65,7 +65,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Parse body
-    let body: { action?: Action } = {};
+    let body: { action?: Action; promotionId?: string; gymId?: string } = {};
     try {
       body = await req.json();
     } catch {
@@ -121,6 +121,24 @@ Deno.serve(async (req: Request) => {
           .maybeSingle();
         if (error) throw new Error(`Failed to read world: ${error.message}`);
         result = { action, status: 'ok', data: world };
+        break;
+      }
+      case 'assign_promotion': {
+        if (!body.promotionId || !body.gymId) {
+          result = { action, status: 'error', message: 'promotionId and gymId are required.' };
+          break;
+        }
+        const { data, error } = await admin.rpc('assign_promotion_owner', {
+          p_promotion_id: body.promotionId,
+          p_gym_id: body.gymId,
+        });
+        if (error) throw new Error(`assign_promotion_owner failed: ${error.message}`);
+        const payload = data as { status?: string; message?: string };
+        if (payload?.status === 'error') {
+          result = { action, status: 'error', message: payload.message || 'Assignment failed.' };
+        } else {
+          result = { action, status: 'ok', message: payload.message || 'Promotion assigned.', data };
+        }
         break;
       }
       default:

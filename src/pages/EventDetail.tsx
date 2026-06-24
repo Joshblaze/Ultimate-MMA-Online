@@ -1,11 +1,21 @@
 import { useEffect, useState } from 'react';
-import { CalendarDays, ChevronLeft, Trophy } from 'lucide-react';
+import { CalendarDays, ChevronLeft, Trophy, Plus, Play, AlertCircle, CheckCircle2 } from 'lucide-react';
 import type { PageProps } from '../App';
-import { Card, EmptyState, PageHeader, Spinner, Badge, Belt } from '../components/ui';
-import { fetchEventDetail } from '../lib/queries';
+import { Card, EmptyState, PageHeader, Spinner, Badge, Belt, Alert } from '../components/ui';
+import {
+  fetchEventDetail,
+  fetchOwnedPromotion,
+  fetchBookableFighters,
+  fetchEventPendingOffers,
+  callAddEventFight,
+  callRunEvent,
+} from '../lib/queries';
 import { formatTick } from '../lib/format';
-import { PROMOTION_TIER_NAMES, PROMOTION_TIER_COLORS } from '../lib/constants';
+import { PROMOTION_TIER_NAMES, PROMOTION_TIER_COLORS, EVENT_LEAD_WEEKS } from '../lib/constants';
 import { navigate } from '../App';
+import { useGym } from '../lib/gym';
+import { useWorld } from '../lib/world';
+import type { Fighter, Promotion } from '../lib/types';
 
 interface FightRow {
   id: string;
@@ -15,26 +25,94 @@ interface FightRow {
   is_title_fight: boolean;
   status: string;
   commentary: string[] | null;
-  fighter_a?: { id: string; name: string; country: string; wins: number; losses: number };
-  fighter_b?: { id: string; name: string; country: string; wins: number; losses: number };
+  fighter_a?: { id: string; name: string; country: string; wins: number; losses: number; gym_id?: string | null };
+  fighter_b?: { id: string; name: string; country: string; wins: number; losses: number; gym_id?: string | null };
   winner?: { id: string; name: string };
 }
 
 export function EventDetail({ params }: PageProps) {
+  const { gym } = useGym();
+  const { world, refresh: refreshWorld } = useWorld();
   const [event, setEvent] = useState<any>(null);
   const [fights, setFights] = useState<FightRow[]>([]);
+  const [ownedPromotion, setOwnedPromotion] = useState<Promotion | null>(null);
+  const [bookableFighters, setBookableFighters] = useState<Fighter[]>([]);
+  const [pendingOffers, setPendingOffers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedFight, setExpandedFight] = useState<string | null>(null);
+  const [fighterAId, setFighterAId] = useState('');
+  const [fighterBId, setFighterBId] = useState('');
+  const [isTitleFight, setIsTitleFight] = useState(false);
+  const [purse, setPurse] = useState(5000);
+  const [addingFight, setAddingFight] = useState(false);
+  const [runningEvent, setRunningEvent] = useState(false);
+  const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+
+  const isOwner = ownedPromotion && event?.promotion_id === ownedPromotion.id;
+  const canRun = isOwner && event?.status === 'scheduled' && world && world.tick_count >= event.scheduled_week;
+
+  async function load() {
+    setLoading(true);
+    try {
+      const [{ event: ev, fights: f }, promo, offers] = await Promise.all([
+        fetchEventDetail(params.id),
+        gym ? fetchOwnedPromotion(gym.id) : Promise.resolve(null),
+        fetchEventPendingOffers(params.id),
+      ]);
+      setEvent(ev);
+      setFights(f as FightRow[]);
+      setOwnedPromotion(promo);
+      setPendingOffers(offers);
+      if (promo && ev?.promotion_id === promo.id) {
+        const roster = await fetchBookableFighters(promo.id);
+        setBookableFighters(roster as Fighter[]);
+      }
+    } catch (e) {
+      console.error('Failed to load event:', (e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    fetchEventDetail(params.id)
-      .then(({ event, fights }) => {
-        setEvent(event);
-        setFights(fights as FightRow[]);
-      })
-      .catch((e) => console.error('Failed to load event:', e.message))
-      .finally(() => setLoading(false));
-  }, [params.id]);
+    load();
+  }, [params.id, gym?.id, world?.tick_count]);
+
+  async function handleAddFight(e: React.FormEvent) {
+    e.preventDefault();
+    if (!fighterAId || !fighterBId) return;
+    setAddingFight(true);
+    setMessage(null);
+    try {
+      const r = await callAddEventFight(params.id, fighterAId, fighterBId, isTitleFight, purse);
+      if (r.status !== 'ok') throw new Error(r.message || 'Failed to add fight.');
+      setMessage({ kind: 'success', text: r.message || 'Fight added.' });
+      setFighterAId('');
+      setFighterBId('');
+      setIsTitleFight(false);
+      await load();
+    } catch (err) {
+      setMessage({ kind: 'error', text: (err as Error).message });
+    } finally {
+      setAddingFight(false);
+    }
+  }
+
+  async function handleRunEvent() {
+    setRunningEvent(true);
+    setMessage(null);
+    try {
+      const r = await callRunEvent(params.id);
+      if (r.status !== 'ok') throw new Error(r.message || 'Failed to run event.');
+      setMessage({ kind: 'success', text: r.message || 'Event completed.' });
+      await refreshWorld();
+      await load();
+    } catch (err) {
+      setMessage({ kind: 'error', text: (err as Error).message });
+    } finally {
+      setRunningEvent(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -55,14 +133,20 @@ export function EventDetail({ params }: PageProps) {
   }
 
   const promo = event.promotion;
+  const filteredFighters = bookableFighters.filter(
+    (f) => !fighterBId || f.id !== fighterBId,
+  );
+  const filteredFightersB = bookableFighters.filter(
+    (f) => !fighterAId || f.id !== fighterAId,
+  );
 
   return (
     <div className="animate-slideUp">
       <button
-        onClick={() => navigate('events')}
+        onClick={() => navigate(isOwner ? 'manage-promotion' : 'events')}
         className="flex items-center gap-1 text-sm text-ink-400 hover:text-ink-200 mb-4"
       >
-        <ChevronLeft className="w-4 h-4" /> Back to Events
+        <ChevronLeft className="w-4 h-4" /> Back
       </button>
 
       <PageHeader
@@ -70,13 +154,35 @@ export function EventDetail({ params }: PageProps) {
         subtitle={`${formatTick(event.scheduled_week)} · ${event.status === 'completed' ? 'Completed' : 'Scheduled'}`}
         icon={CalendarDays}
         action={
-          promo && (
-            <Badge className={PROMOTION_TIER_COLORS[promo.tier]}>
-              {PROMOTION_TIER_NAMES[promo.tier]}
-            </Badge>
-          )
+          <div className="flex items-center gap-2">
+            {promo && (
+              <Badge className={PROMOTION_TIER_COLORS[promo.tier]}>
+                {PROMOTION_TIER_NAMES[promo.tier]}
+              </Badge>
+            )}
+            {canRun && (
+              <button
+                onClick={handleRunEvent}
+                disabled={runningEvent || pendingOffers.length > 0}
+                className="btn-primary text-sm"
+                title={pendingOffers.length > 0 ? 'Resolve pending offers first' : 'Simulate event'}
+              >
+                {runningEvent ? <Spinner /> : <><Play className="w-4 h-4" /> Run Event</>}
+              </button>
+            )}
+          </div>
         }
       />
+
+      {message && (
+        <div className="mb-4">
+          {message.kind === 'success' ? (
+            <Alert variant="success"><span className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> {message.text}</span></Alert>
+          ) : (
+            <Alert variant="error"><span className="flex items-center gap-2"><AlertCircle className="w-4 h-4" /> {message.text}</span></Alert>
+          )}
+        </div>
+      )}
 
       {promo && (
         <div className="mb-6">
@@ -89,8 +195,75 @@ export function EventDetail({ params }: PageProps) {
         </div>
       )}
 
+      {isOwner && event.status === 'scheduled' && (
+        <Card className="mb-6">
+          <div className="p-4 border-b border-ink-800">
+            <h3 className="font-display font-semibold text-ink-100">Add Fight to Card</h3>
+            <p className="text-xs text-ink-400 mt-1">
+              Unsigned fighters auto-accept. Player-managed fighters receive a 2-week offer.
+              Book at least {EVENT_LEAD_WEEKS} weeks before the event date.
+            </p>
+          </div>
+          <form onSubmit={handleAddFight} className="p-4 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="label">Fighter A</label>
+                <select className="input" value={fighterAId} onChange={(e) => setFighterAId(e.target.value)} required>
+                  <option value="">Select...</option>
+                  {filteredFighters.map((f) => (
+                    <option key={f.id} value={f.id}>{f.name} · {f.weight_class}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Fighter B</label>
+                <select className="input" value={fighterBId} onChange={(e) => setFighterBId(e.target.value)} required>
+                  <option value="">Select...</option>
+                  {filteredFightersB.map((f) => (
+                    <option key={f.id} value={f.id}>{f.name} · {f.weight_class}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-4">
+              <label className="flex items-center gap-2 text-sm text-ink-300">
+                <input type="checkbox" checked={isTitleFight} onChange={(e) => setIsTitleFight(e.target.checked)} />
+                Title fight
+              </label>
+              <div className="flex items-center gap-2">
+                <label className="label mb-0">Purse</label>
+                <input
+                  type="number"
+                  min={1000}
+                  step={500}
+                  className="input w-32"
+                  value={purse}
+                  onChange={(e) => setPurse(parseInt(e.target.value, 10) || 5000)}
+                />
+              </div>
+            </div>
+            <button type="submit" disabled={addingFight} className="btn-primary">
+              {addingFight ? <Spinner /> : <><Plus className="w-4 h-4" /> Add Fight</>}
+            </button>
+          </form>
+        </Card>
+      )}
+
+      {pendingOffers.length > 0 && (
+        <Card className="mb-6 p-4">
+          <h3 className="font-display font-semibold text-ink-100 mb-2">Awaiting Gym Response</h3>
+          <ul className="space-y-2 text-sm text-ink-300">
+            {pendingOffers.map((o) => (
+              <li key={o.id}>
+                {o.fighter?.name} vs {o.opponent_fighter?.name} — offer pending
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       {fights.length === 0 ? (
-        <Card><EmptyState icon={CalendarDays} title="No fights booked yet" body={event.status === 'scheduled' ? 'The fight card will be populated as the event approaches.' : 'No fights on record for this event.'} /></Card>
+        <Card><EmptyState icon={CalendarDays} title="No fights booked yet" body={event.status === 'scheduled' ? 'Add fights to build the card.' : 'No fights on record for this event.'} /></Card>
       ) : (
         <div className="space-y-3">
           {fights.map((fight) => {
