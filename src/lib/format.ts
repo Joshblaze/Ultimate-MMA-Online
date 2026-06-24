@@ -15,6 +15,10 @@ export function tickToCalendar(tick: number): CalendarDate {
   };
 }
 
+export function calendarToTick({ year, month, week }: CalendarDate): number {
+  return (year - 1) * WEEKS_PER_YEAR + (month - 1) * WEEKS_PER_MONTH + (week - 1);
+}
+
 export function formatMoney(n: number): string {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;

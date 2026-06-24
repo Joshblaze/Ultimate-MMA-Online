@@ -15,8 +15,8 @@ import {
   callCreatePromotionEvent,
   callSendContractOffer,
 } from '../lib/queries';
-import { formatTick } from '../lib/format';
-import { EVENT_LEAD_WEEKS, OFFER_RESPONSE_WEEKS, PROMOTION_TIER_NAMES, PROMOTION_TIER_COLORS } from '../lib/constants';
+import { formatTick, tickToCalendar, calendarToTick, type CalendarDate } from '../lib/format';
+import { EVENT_LEAD_WEEKS, OFFER_RESPONSE_WEEKS, PROMOTION_TIER_NAMES, PROMOTION_TIER_COLORS, MONTH_NAMES } from '../lib/constants';
 import type { Fighter, Promotion } from '../lib/types';
 
 export function ManagePromotion(_: PageProps) {
@@ -27,7 +27,7 @@ export function ManagePromotion(_: PageProps) {
   const [fighters, setFighters] = useState<Fighter[]>([]);
   const [loading, setLoading] = useState(true);
   const [eventName, setEventName] = useState('');
-  const [extraWeeks, setExtraWeeks] = useState(0);
+  const [eventCalendar, setEventCalendar] = useState<CalendarDate>({ year: 1, month: 1, week: 1 });
   const [creatingEvent, setCreatingEvent] = useState(false);
   const [contractFighterId, setContractFighterId] = useState('');
   const [contractFights, setContractFights] = useState(4);
@@ -36,7 +36,17 @@ export function ManagePromotion(_: PageProps) {
   const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
 
   const minEventWeek = (world?.tick_count ?? 0) + EVENT_LEAD_WEEKS;
-  const scheduledWeek = minEventWeek + extraWeeks;
+  const scheduledWeek = calendarToTick(eventCalendar);
+  const dateTooSoon = scheduledWeek < minEventWeek;
+  const existingEventSameWeek = events.some((e) => e.scheduled_week === scheduledWeek);
+  const minCalendar = tickToCalendar(minEventWeek);
+  const maxYear = minCalendar.year + 3;
+
+  useEffect(() => {
+    if (scheduledWeek < minEventWeek) {
+      setEventCalendar(tickToCalendar(minEventWeek));
+    }
+  }, [minEventWeek, scheduledWeek]);
 
   async function load() {
     if (!gym) return;
@@ -67,6 +77,10 @@ export function ManagePromotion(_: PageProps) {
   }, [gym?.id, world?.tick_count]);
 
   if (!gym) return null;
+
+  function setEventWeekFromTick(tick: number) {
+    setEventCalendar(tickToCalendar(Math.max(tick, minEventWeek)));
+  }
 
   async function handleCreateEvent(e: React.FormEvent) {
     e.preventDefault();
@@ -160,8 +174,8 @@ export function ManagePromotion(_: PageProps) {
           <CardHeader title="Schedule Event" icon={CalendarDays} />
           <form onSubmit={handleCreateEvent} className="p-4 space-y-4">
             <p className="text-xs text-ink-400">
-              Events must be scheduled at least {EVENT_LEAD_WEEKS} weeks (1 month) in advance.
-              Fight offers to player gyms expire after {OFFER_RESPONSE_WEEKS} weeks.
+              Pick any in-game week on or after the earliest available date ({formatTick(minEventWeek)}).
+              Schedule multiple events on different weeks to build your calendar.
             </p>
             <div>
               <label className="label">Event Name</label>
@@ -174,17 +188,81 @@ export function ManagePromotion(_: PageProps) {
               />
             </div>
             <div>
-              <label className="label">Extra weeks beyond minimum</label>
-              <input
-                type="number"
-                min={0}
-                className="input"
-                value={extraWeeks}
-                onChange={(e) => setExtraWeeks(Math.max(0, parseInt(e.target.value, 10) || 0))}
-              />
-              <p className="text-xs text-ink-500 mt-1">Scheduled for {formatTick(scheduledWeek)}</p>
+              <label className="label">Event Date</label>
+              <div className="grid grid-cols-3 gap-2">
+                <select
+                  className="input"
+                  value={eventCalendar.year}
+                  onChange={(e) => setEventCalendar((c) => ({ ...c, year: parseInt(e.target.value, 10) }))}
+                >
+                  {Array.from({ length: maxYear - minCalendar.year + 1 }, (_, i) => minCalendar.year + i).map((y) => (
+                    <option key={y} value={y}>Year {y}</option>
+                  ))}
+                </select>
+                <select
+                  className="input"
+                  value={eventCalendar.month}
+                  onChange={(e) => setEventCalendar((c) => ({ ...c, month: parseInt(e.target.value, 10) }))}
+                >
+                  {MONTH_NAMES.map((name, i) => (
+                    <option key={name} value={i + 1}>{name}</option>
+                  ))}
+                </select>
+                <select
+                  className="input"
+                  value={eventCalendar.week}
+                  onChange={(e) => setEventCalendar((c) => ({ ...c, week: parseInt(e.target.value, 10) }))}
+                >
+                  {[1, 2, 3, 4].map((w) => (
+                    <option key={w} value={w}>Week {w}</option>
+                  ))}
+                </select>
+              </div>
+              <p className="text-xs text-ink-500 mt-1">
+                Selected: {formatTick(scheduledWeek)}
+                {dateTooSoon && (
+                  <span className="text-blood-300"> · Must be {formatTick(minEventWeek)} or later</span>
+                )}
+                {existingEventSameWeek && !dateTooSoon && (
+                  <span className="text-gold-400"> · Another event is already on this week</span>
+                )}
+              </p>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <button
+                  type="button"
+                  className="btn-secondary text-xs py-1.5"
+                  onClick={() => setEventWeekFromTick(minEventWeek)}
+                >
+                  Earliest ({formatTick(minEventWeek)})
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary text-xs py-1.5"
+                  onClick={() => setEventWeekFromTick(minEventWeek + 4)}
+                >
+                  +1 month
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary text-xs py-1.5"
+                  onClick={() => setEventWeekFromTick(minEventWeek + 8)}
+                >
+                  +2 months
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary text-xs py-1.5"
+                  onClick={() => setEventWeekFromTick(minEventWeek + 12)}
+                >
+                  +3 months
+                </button>
+              </div>
             </div>
-            <button type="submit" disabled={creatingEvent} className="btn-primary w-full">
+            <button
+              type="submit"
+              disabled={creatingEvent || dateTooSoon}
+              className="btn-primary w-full"
+            >
               {creatingEvent ? <Spinner /> : <><Plus className="w-4 h-4" /> Create Event</>}
             </button>
           </form>
