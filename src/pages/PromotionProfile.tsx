@@ -3,6 +3,7 @@ import { Building2, Crown, CalendarDays, ListOrdered, ChevronLeft } from 'lucide
 import type { PageProps } from '../App';
 import { Card, CardHeader, EmptyState, PageHeader, Badge, Spinner, Belt } from '../components/ui';
 import { HiddenSkillCell } from '../components/FighterCard';
+import { ResponsiveDataView } from '../components/ResponsiveDataView';
 import { fetchPromotion } from '../lib/queries';
 import { formatNumber, formatRecord, formatTick } from '../lib/format';
 import { PROMOTION_TIER_NAMES, PROMOTION_TIER_COLORS, rankPositionTextClass } from '../lib/constants';
@@ -77,7 +78,7 @@ export function PromotionProfile({ params }: PageProps) {
         }
       />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <div className="card p-4">
           <div className="stat-label">Reputation</div>
           <div className="stat-value text-ink-100">{p.reputation}</div>
@@ -168,46 +169,74 @@ export function PromotionProfile({ params }: PageProps) {
           {rankingsForWc.length === 0 ? (
             <EmptyState icon={ListOrdered} title="No rankings" body="Rankings have not been computed for this weight class yet." />
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-xs text-ink-500 uppercase tracking-wide border-b border-ink-800">
-                  <th className="px-3 py-2 text-left font-semibold w-12">#</th>
-                  <th className="px-3 py-2 text-left font-semibold">Fighter</th>
-                  <th className="px-3 py-2 text-left font-semibold">Country</th>
-                  <th className="px-3 py-2 text-left font-semibold">Record</th>
-                  <th className="px-3 py-2 text-left font-semibold">Promo Record</th>
-                  <th className="px-3 py-2 text-left font-semibold">Win %</th>
-                  <th className="px-3 py-2 text-left font-semibold">Skill</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-ink-800">
-                {rankingsForWc.map((r) => (
-                  <tr key={r.id} className="table-row-hover" onClick={() => navigate(`fighter/${r.fighter.id}`)}>
-                    <td className={`px-3 py-2 font-mono font-bold ${rankPositionTextClass(r.rank_position)}`}>#{r.rank_position}</td>
-                    <td className="px-3 py-2 text-ink-100 font-medium">{r.fighter.name}</td>
-                    <td className="px-3 py-2 text-ink-300">{r.fighter.country}</td>
-                    <td className="px-3 py-2 text-ink-300 font-mono">{formatRecord(r.fighter.wins, r.fighter.losses)}</td>
-                    <td className="px-3 py-2 text-ink-300 font-mono">
-                      {r.promoStats && r.promoStats.promo_total > 0
-                        ? formatRecord(r.promoStats.promo_wins, r.promoStats.promo_losses, r.promoStats.promo_draws)
-                        : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-ink-300 font-mono">
-                      {r.promoStats && r.promoStats.promo_total > 0
-                        ? `${Math.round(r.promoStats.promo_win_pct * 100)}%`
-                        : '—'}
-                    </td>
-                    <td className="px-3 py-2">
-                      <HiddenSkillCell
-                        fighter={r.fighter}
-                        gymId={gym?.id}
-                        isAdmin={profile?.is_admin ?? false}
-                      />
-                    </td>
+            <ResponsiveDataView
+              mobileRows={rankingsForWc.map((r) => (
+                <div
+                  key={r.id}
+                  className="mobile-list-item"
+                  onClick={() => navigate(`fighter/${r.fighter.id}`)}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className={`font-display font-bold text-xl w-10 flex-shrink-0 ${rankPositionTextClass(r.rank_position)}`}>
+                      #{r.rank_position}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-ink-100 truncate">{r.fighter.name}</div>
+                      <div className="text-xs text-ink-400">{r.fighter.country}</div>
+                      <div className="text-xs font-mono text-ink-300 mt-0.5">
+                        {formatRecord(r.fighter.wins, r.fighter.losses)}
+                      </div>
+                    </div>
+                    <HiddenSkillCell
+                      fighter={r.fighter}
+                      gymId={gym?.id}
+                      isAdmin={profile?.is_admin ?? false}
+                    />
+                  </div>
+                </div>
+              ))}
+            >
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-ink-500 uppercase tracking-wide border-b border-ink-800">
+                    <th className="px-3 py-2 text-left font-semibold w-12">#</th>
+                    <th className="px-3 py-2 text-left font-semibold">Fighter</th>
+                    <th className="px-3 py-2 text-left font-semibold">Country</th>
+                    <th className="px-3 py-2 text-left font-semibold">Record</th>
+                    <th className="px-3 py-2 text-left font-semibold">Promo Record</th>
+                    <th className="px-3 py-2 text-left font-semibold">Win %</th>
+                    <th className="px-3 py-2 text-left font-semibold">Skill</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-ink-800">
+                  {rankingsForWc.map((r) => (
+                    <tr key={r.id} className="table-row-hover" onClick={() => navigate(`fighter/${r.fighter.id}`)}>
+                      <td className={`px-3 py-2 font-mono font-bold ${rankPositionTextClass(r.rank_position)}`}>#{r.rank_position}</td>
+                      <td className="px-3 py-2 text-ink-100 font-medium">{r.fighter.name}</td>
+                      <td className="px-3 py-2 text-ink-300">{r.fighter.country}</td>
+                      <td className="px-3 py-2 text-ink-300 font-mono">{formatRecord(r.fighter.wins, r.fighter.losses)}</td>
+                      <td className="px-3 py-2 text-ink-300 font-mono">
+                        {r.promoStats && r.promoStats.promo_total > 0
+                          ? formatRecord(r.promoStats.promo_wins, r.promoStats.promo_losses, r.promoStats.promo_draws)
+                          : '—'}
+                      </td>
+                      <td className="px-3 py-2 text-ink-300 font-mono">
+                        {r.promoStats && r.promoStats.promo_total > 0
+                          ? `${Math.round(r.promoStats.promo_win_pct * 100)}%`
+                          : '—'}
+                      </td>
+                      <td className="px-3 py-2">
+                        <HiddenSkillCell
+                          fighter={r.fighter}
+                          gymId={gym?.id}
+                          isAdmin={profile?.is_admin ?? false}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ResponsiveDataView>
           )}
         </Card>
       )}

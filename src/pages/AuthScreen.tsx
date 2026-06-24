@@ -63,27 +63,31 @@ export function AuthScreen() {
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
-      {/* Left brand panel */}
-      <div className="relative lg:w-1/2 bg-gradient-to-br from-ink-950 via-ink-900 to-ink-850 flex flex-col justify-center items-center px-6 py-12 overflow-hidden">
-        <div className="absolute inset-0 opacity-30">
+      {/* Brand panel — compact strip on mobile, full hero on desktop */}
+      <div className="relative lg:w-1/2 bg-gradient-to-br from-ink-950 via-ink-900 to-ink-850 flex flex-col justify-center items-center px-4 py-6 lg:px-6 lg:py-12 overflow-hidden flex-shrink-0">
+        <div className="absolute inset-0 opacity-30 hidden lg:block">
           <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-gold-700/20 rounded-full blur-3xl" />
           <div className="absolute bottom-1/4 right-1/4 w-72 h-72 bg-blood-700/20 rounded-full blur-3xl" />
         </div>
-        <div className="relative z-10 max-w-md text-center">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-gold-500 to-gold-700 shadow-belt mb-6">
-            <Trophy className="w-10 h-10 text-ink-950" />
+        <div className="relative z-10 max-w-md text-center w-full">
+          <div className="flex items-center justify-center gap-3 lg:flex-col lg:gap-0">
+            <div className="inline-flex items-center justify-center w-12 h-12 lg:w-20 lg:h-20 rounded-xl lg:rounded-2xl bg-gradient-to-br from-gold-500 to-gold-700 shadow-belt lg:mb-6 flex-shrink-0">
+              <Trophy className="w-6 h-6 lg:w-10 lg:h-10 text-ink-950" />
+            </div>
+            <div className="text-left lg:text-center">
+              <h1 className="font-display text-xl lg:text-4xl font-bold tracking-tight text-ink-100 lg:mb-3">
+                ULTIMATE MMA
+              </h1>
+              <p className="font-display tracking-[0.2em] lg:tracking-[0.3em] text-gold-500 text-[10px] lg:text-sm uppercase">
+                Manager Online
+              </p>
+            </div>
           </div>
-          <h1 className="font-display text-4xl font-bold tracking-tight text-ink-100 mb-3">
-            ULTIMATE MMA
-          </h1>
-          <p className="font-display tracking-[0.3em] text-gold-500 text-sm uppercase mb-6">
-            Manager Online
-          </p>
-          <p className="text-ink-300 text-sm leading-relaxed mb-8">
+          <p className="hidden lg:block text-ink-300 text-sm leading-relaxed mb-8 mt-6">
             Build the greatest MMA gym in a living, persistent world. Sign fighters, chase
             championships, and rise through global rankings — even while you sleep.
           </p>
-          <div className="grid grid-cols-3 gap-4 text-center">
+          <div className="hidden lg:grid grid-cols-3 gap-4 text-center">
             <div>
               <div className="font-display text-2xl font-bold text-gold-400">1000+</div>
               <div className="text-xs text-ink-400 uppercase tracking-wide">Fighters</div>
@@ -100,9 +104,9 @@ export function AuthScreen() {
         </div>
       </div>
 
-      {/* Right form panel */}
-      <div className="lg:w-1/2 flex items-center justify-center px-6 py-12">
-        <div className="w-full max-w-sm">
+      {/* Form panel */}
+      <div className="flex-1 lg:w-1/2 flex items-start lg:items-center justify-center px-4 py-6 sm:px-6 sm:py-8 lg:py-12">
+        <div className="w-full max-w-sm card-glass p-5 sm:p-6 lg:p-0 lg:bg-transparent lg:border-0 lg:shadow-none lg:backdrop-blur-none">
           {mode === 'reset' && (
             <button
               onClick={() => setMode('login')}
@@ -112,7 +116,7 @@ export function AuthScreen() {
             </button>
           )}
 
-          <h2 className="font-display text-2xl font-bold text-ink-100 mb-1">
+          <h2 className="font-display text-xl sm:text-2xl font-bold text-ink-100 mb-1">
             {mode === 'login' ? 'Welcome Back' : mode === 'register' ? 'Create Your Account' : 'Reset Password'}
           </h2>
           <p className="text-sm text-ink-400 mb-6">

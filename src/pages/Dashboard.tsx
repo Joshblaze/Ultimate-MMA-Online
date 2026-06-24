@@ -7,7 +7,8 @@ import { useGym } from '../lib/gym';
 import { useWorld } from '../lib/world';
 import type { PageProps } from '../App';
 import { Card, CardHeader, EmptyState, PageHeader, StatPanel, Badge } from '../components/ui';
-import { FighterRow } from '../components/FighterCard';
+import { FighterRow, FighterListItem } from '../components/FighterCard';
+import { ResponsiveDataView } from '../components/ResponsiveDataView';
 import {
   fetchGymFighters, fetchGymOffers, fetchRecentNews, fetchGymRecentFights,
 } from '../lib/queries';
@@ -80,7 +81,7 @@ export function Dashboard(_: PageProps) {
       />
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
         <StatPanel
           label="Cash"
           value={formatMoney(gym.cash)}
@@ -147,7 +148,15 @@ export function Dashboard(_: PageProps) {
                 }
               />
             ) : (
-              <div className="overflow-x-auto">
+              <ResponsiveDataView
+                mobileRows={fighters.slice(0, 5).map((f) => (
+                  <FighterListItem
+                    key={f.id}
+                    fighter={f}
+                    onClick={() => navigate(`fighter/${f.id}`)}
+                  />
+                ))}
+              >
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-xs text-ink-500 uppercase tracking-wide border-b border-ink-800">
@@ -168,7 +177,7 @@ export function Dashboard(_: PageProps) {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </ResponsiveDataView>
             )}
           </Card>
 

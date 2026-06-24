@@ -2,7 +2,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { Search, Users, AlertCircle } from 'lucide-react';
 import type { PageProps } from '../App';
 import { Card, EmptyState, PageHeader, Spinner } from '../components/ui';
-import { FighterRow } from '../components/FighterCard';
+import { FighterRow, FighterListItem } from '../components/FighterCard';
+import { ResponsiveDataView } from '../components/ResponsiveDataView';
 import { fetchScoutFighters, callSignFighter } from '../lib/queries';
 import { formatMoney } from '../lib/format';
 import type { Fighter } from '../lib/types';
@@ -89,8 +90,8 @@ export function Scout(_: PageProps) {
         }
       />
 
-      <div className="mb-4 flex flex-wrap gap-2 items-center">
-        <div className="relative flex-1 min-w-[200px]">
+      <div className="mb-4 flex flex-col sm:flex-row gap-2 sm:items-center">
+        <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-500" />
           <input
             value={search}
@@ -102,7 +103,7 @@ export function Scout(_: PageProps) {
         <select
           value={wcFilter}
           onChange={(e) => setWcFilter(e.target.value)}
-          className="input w-auto"
+          className="input w-full sm:w-auto"
         >
           <option value="All">All Weight Classes</option>
           {WEIGHT_CLASSES.map((wc) => (
@@ -117,7 +118,34 @@ export function Scout(_: PageProps) {
         ) : filtered.length === 0 ? (
           <EmptyState icon={Users} title="No fighters available" body="All active fighters currently have gym management. Check back after the next world tick." />
         ) : (
-          <div className="overflow-x-auto">
+          <ResponsiveDataView
+            mobileRows={filtered.map((f) => (
+              <FighterListItem
+                key={f.id}
+                fighter={f}
+                hideStats
+                onClick={() => navigate(`fighter/${f.id}`)}
+                footer={
+                  <>
+                    <span className={`badge border ${
+                      f.promotion_id
+                        ? 'text-blue-300 bg-blue-900/30 border-blue-700/40'
+                        : 'text-ink-400 bg-ink-800 border-ink-700'
+                    }`}>
+                      {f.promotion_id ? 'Promotion contracted' : 'Free agent'}
+                    </span>
+                    <button
+                      onClick={() => handleSign(f)}
+                      disabled={signing === f.id}
+                      className="btn-primary text-xs px-3 py-1.5"
+                    >
+                      {signing === f.id ? <Spinner className="w-3 h-3" /> : 'Sign'}
+                    </button>
+                  </>
+                }
+              />
+            ))}
+          >
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-xs text-ink-500 uppercase tracking-wide border-b border-ink-800">
@@ -164,7 +192,7 @@ export function Scout(_: PageProps) {
                   ))}
               </tbody>
             </table>
-            <div className="border-t border-ink-800 p-3 flex items-center justify-between">
+            <div className="border-t border-ink-800 p-3 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
               <div className="text-xs text-ink-400">
                 Showing {filtered.length} of {total.toLocaleString()} unmanaged fighters
               </div>
@@ -178,7 +206,7 @@ export function Scout(_: PageProps) {
                 </button>
               )}
             </div>
-          </div>
+          </ResponsiveDataView>
         )}
       </Card>
 

@@ -21,7 +21,7 @@ export function MyGym(_: PageProps) {
         icon={Dumbbell}
       />
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
         <StatPanel label="Tier" value={gym.tier} icon={Trophy} color="text-gold-300" />
         <StatPanel label="Reputation" value={gym.reputation} icon={TrendingUp} color="text-forest-300" />
         <StatPanel label="Ranking" value={gym.ranking ? `#${gym.ranking}` : '—'} icon={Trophy} color="text-gold-300" />
@@ -60,7 +60,7 @@ export function MyGym(_: PageProps) {
           <Card>
             <CardHeader title="Gym Facilities" icon={Wrench} subtitle="Planned feature — coming soon" />
             <div className="p-4">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                 {['Strength & Conditioning', 'Recovery Suite', 'Sparring Cage', 'Sauna & Cut Room', 'Nutrition Lab', 'Strategy Room'].map((facility) => (
                   <div key={facility} className="rounded-lg bg-ink-900 border border-ink-800 p-3 opacity-50">
                     <div className="text-xs text-ink-400 uppercase tracking-wide font-semibold">{facility}</div>

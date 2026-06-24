@@ -54,16 +54,31 @@ export default {
           200: '#7fd99a',
           100: '#b1ecc5',
         },
+        glass: {
+          bg: 'rgba(20, 26, 35, 0.75)',
+          border: 'rgba(255, 255, 255, 0.08)',
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         display: ['Oswald', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
       },
+      spacing: {
+        'safe-top': 'env(safe-area-inset-top, 0px)',
+        'safe-bottom': 'env(safe-area-inset-bottom, 0px)',
+        'safe-left': 'env(safe-area-inset-left, 0px)',
+        'safe-right': 'env(safe-area-inset-right, 0px)',
+      },
       boxShadow: {
         belt: '0 0 24px -4px rgba(224, 182, 46, 0.5)',
-        card: '0 1px 3px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.04)',
-        'card-2': '0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)',
+        card: '0 1px 3px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.06)',
+        'card-2': '0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.07)',
+        glass: '0 4px 24px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
+        'glass-bar': '0 -1px 0 rgba(255, 255, 255, 0.06), 0 -8px 32px rgba(0, 0, 0, 0.4)',
+      },
+      backdropBlur: {
+        xs: '2px',
       },
       keyframes: {
         pulseGlow: {
@@ -78,11 +93,16 @@ export default {
           from: { opacity: '0' },
           to: { opacity: '1' },
         },
+        slideInLeft: {
+          from: { transform: 'translateX(-100%)' },
+          to: { transform: 'translateX(0)' },
+        },
       },
       animation: {
         pulseGlow: 'pulseGlow 2s ease-in-out infinite',
         slideUp: 'slideUp 0.3s ease-out',
         fadeIn: 'fadeIn 0.25s ease-out',
+        slideInLeft: 'slideInLeft 0.2s ease-out',
       },
     },
   },

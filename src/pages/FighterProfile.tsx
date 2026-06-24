@@ -179,7 +179,7 @@ export function FighterProfile({ params }: PageProps) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 mt-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-5">
                 <Stat label="Record" value={formatRecord(f.wins, f.losses, f.draws)} />
                 <Stat label="Weight Class" value={f.weight_class} />
                 {statsVisible ? (

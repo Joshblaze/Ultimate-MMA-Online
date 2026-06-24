@@ -3,7 +3,8 @@ import { Search, Users, UserMinus, AlertCircle } from 'lucide-react';
 import { useGym } from '../lib/gym';
 import type { PageProps } from '../App';
 import { Card, EmptyState, PageHeader, Spinner } from '../components/ui';
-import { FighterRow } from '../components/FighterCard';
+import { FighterRow, FighterListItem } from '../components/FighterCard';
+import { ResponsiveDataView } from '../components/ResponsiveDataView';
 import { callReleaseFighter, fetchGymFighters } from '../lib/queries';
 import { formatRecord } from '../lib/format';
 import type { Fighter } from '../lib/types';
@@ -68,8 +69,8 @@ export function MyFighters(_: PageProps) {
         }
       />
 
-      <div className="mb-4 flex flex-wrap gap-2 items-center">
-        <div className="relative flex-1 min-w-[200px]">
+      <div className="mb-4 flex flex-col sm:flex-row gap-2 sm:items-center">
+        <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-500" />
           <input
             value={search}
@@ -81,7 +82,7 @@ export function MyFighters(_: PageProps) {
         <select
           value={wcFilter}
           onChange={(e) => setWcFilter(e.target.value)}
-          className="input w-auto"
+          className="input w-full sm:w-auto"
         >
           <option value="All">All Weight Classes</option>
           {WEIGHT_CLASSES.map((wc) => (
@@ -114,7 +115,56 @@ export function MyFighters(_: PageProps) {
             ) : undefined}
           />
         ) : (
-          <div className="overflow-x-auto">
+          <ResponsiveDataView
+            mobileRows={filtered.map((f) => (
+              <FighterListItem
+                key={f.id}
+                fighter={f}
+                onClick={() => navigate(`fighter/${f.id}`)}
+                footer={
+                  <>
+                    <span className={`badge border ${
+                      f.career_status === 'champion' ? 'text-gold-300 bg-gold-700/30 border-gold-600/40' :
+                      f.career_status === 'contender' ? 'text-blue-300 bg-blue-700/30 border-blue-600/40' :
+                      f.career_status === 'veteran' ? 'text-ink-300 bg-ink-700 border-ink-600' :
+                      'text-forest-300 bg-forest-700/30 border-forest-600/40'
+                    }`}>
+                      {f.career_status}
+                    </span>
+                    {confirmingId === f.id ? (
+                      <>
+                        <button
+                          onClick={() => handleRelease(f)}
+                          disabled={releasing === f.id}
+                          className="btn-danger text-xs px-2 py-1"
+                        >
+                          {releasing === f.id ? <Spinner className="w-3 h-3" /> : 'Confirm'}
+                        </button>
+                        <button
+                          onClick={() => setConfirmingId(null)}
+                          disabled={releasing === f.id}
+                          className="btn-secondary text-xs px-2 py-1"
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setConfirmingId(f.id);
+                          setReleaseError(null);
+                        }}
+                        className="btn-danger text-xs px-2 py-1"
+                        title="Release from your gym"
+                      >
+                        <UserMinus className="w-3 h-3" />
+                      </button>
+                    )}
+                  </>
+                }
+              />
+            ))}
+          >
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-xs text-ink-500 uppercase tracking-wide border-b border-ink-800">
@@ -184,7 +234,7 @@ export function MyFighters(_: PageProps) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ResponsiveDataView>
         )}
       </Card>
     </div>

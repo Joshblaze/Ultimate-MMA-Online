@@ -5,17 +5,20 @@ export function Card({
   children,
   className = '',
   hover = false,
+  variant = 'default',
   onClick,
 }: {
   children: ReactNode;
   className?: string;
   hover?: boolean;
+  variant?: 'default' | 'glass';
   onClick?: () => void;
 }) {
+  const base = variant === 'glass' ? 'card-glass' : 'card';
   return (
     <div
       onClick={onClick}
-      className={`card ${hover ? 'hover:border-ink-600 transition-colors cursor-pointer' : ''} ${className}`}
+      className={`${base} ${hover ? 'hover:border-white/10 transition-colors cursor-pointer' : ''} ${className}`}
     >
       {children}
     </div>
@@ -34,19 +37,19 @@ export function CardHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between p-4 border-b border-ink-800/60">
-      <div className="flex items-start gap-3">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between p-4 border-b border-ink-800/60">
+      <div className="flex items-start gap-3 min-w-0">
         {Icon && (
-          <div className="w-9 h-9 rounded-lg bg-ink-800 flex items-center justify-center flex-shrink-0">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-ink-800 flex items-center justify-center flex-shrink-0">
             <Icon className="w-4 h-4 text-gold-400" />
           </div>
         )}
-        <div>
+        <div className="min-w-0">
           <h3 className="font-display font-semibold text-ink-100 leading-tight">{title}</h3>
           {subtitle && <p className="text-xs text-ink-400 mt-0.5">{subtitle}</p>}
         </div>
       </div>
-      {action}
+      {action && <div className="flex-shrink-0 sm:ml-2">{action}</div>}
     </div>
   );
 }
@@ -65,16 +68,16 @@ export function StatPanel({
   sub?: string;
 }) {
   return (
-    <div className="card p-4">
-      <div className="flex items-start justify-between">
+    <div className="card p-3 sm:p-4">
+      <div className="flex items-center justify-between gap-2">
         <span className="stat-label">{label}</span>
         {Icon && (
-          <div className="w-8 h-8 rounded-lg bg-ink-800 flex items-center justify-center">
-            <Icon className={`w-4 h-4 ${color}`} />
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-ink-800 flex items-center justify-center flex-shrink-0">
+            <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${color}`} />
           </div>
         )}
       </div>
-      <div className={`stat-value mt-2 font-display ${color}`}>{value}</div>
+      <div className={`stat-value mt-1.5 sm:mt-2 font-display ${color}`}>{value}</div>
       {sub && <div className="text-xs text-ink-400 mt-1">{sub}</div>}
     </div>
   );
@@ -213,21 +216,21 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between mb-6 animate-slideUp">
-      <div className="flex items-start gap-3">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-5 sm:mb-6 animate-slideUp">
+      <div className="flex items-start gap-3 min-w-0">
         {Icon && (
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-ink-800 to-ink-850 border border-ink-700 flex items-center justify-center flex-shrink-0">
-            <Icon className="w-5 h-5 text-gold-400" />
+          <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-ink-800 to-ink-850 border border-white/[0.06] flex items-center justify-center flex-shrink-0">
+            <Icon className="w-4 h-4 sm:w-5 sm:h-5 text-gold-400" />
           </div>
         )}
-        <div>
-          <h1 className="font-display text-2xl font-bold text-ink-100 tracking-tight leading-tight">
+        <div className="min-w-0">
+          <h1 className="font-display text-xl sm:text-2xl font-bold text-ink-100 tracking-tight leading-tight">
             {title}
           </h1>
-          {subtitle && <p className="text-sm text-ink-400 mt-0.5">{subtitle}</p>}
+          {subtitle && <p className="text-xs sm:text-sm text-ink-400 mt-0.5">{subtitle}</p>}
         </div>
       </div>
-      {action}
+      {action && <div className="flex-shrink-0">{action}</div>}
     </div>
   );
 }

@@ -19,7 +19,7 @@ export function FighterCard({ fighter, onClick, hideStats }: FighterCardProps) {
   return (
     <div
       onClick={onClick}
-      className="card p-4 hover:border-ink-600 transition-colors cursor-pointer"
+      className="card p-4 hover:border-white/10 transition-colors cursor-pointer"
     >
       <div className="flex items-center gap-3">
         <div className="relative">
@@ -117,6 +117,65 @@ export function FighterRow({ fighter, onClick, right, hideStats }: FighterRowPro
       </td>
       {right && <td className="px-3 py-2 whitespace-nowrap text-right">{right}</td>}
     </tr>
+  );
+}
+
+interface FighterListItemProps {
+  fighter: Fighter;
+  onClick?: () => void;
+  hideStats?: boolean;
+  footer?: React.ReactNode;
+}
+
+/** Compact mobile list row — used below md breakpoint instead of table rows */
+export function FighterListItem({ fighter, onClick, hideStats, footer }: FighterListItemProps) {
+  const tier = ratingTier(fighter.current_skill);
+
+  return (
+    <div
+      onClick={onClick}
+      className={`mobile-list-item ${onClick ? '' : 'cursor-default'}`}
+    >
+      <div className="flex items-center gap-3">
+        <div className="relative flex-shrink-0">
+          <Avatar name={fighter.name} size="sm" />
+          {!hideStats && fighter.career_status === 'champion' && (
+            <div className="absolute -bottom-0.5 -right-0.5">
+              <Belt size="sm" />
+            </div>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-medium text-ink-100 truncate flex items-center gap-1.5">
+            {fighter.name}
+            {!hideStats && fighter.career_status === 'champion' && (
+              <Trophy className="w-3 h-3 text-gold-400 flex-shrink-0" />
+            )}
+          </div>
+          <div className="text-xs text-ink-400 mt-0.5">
+            {fighter.weight_class} · {fighter.age}y · {fighter.country}
+          </div>
+          <div className="text-xs font-mono text-ink-300 mt-0.5">
+            {formatRecord(fighter.wins, fighter.losses, fighter.draws)}
+          </div>
+        </div>
+        <div className="text-right flex-shrink-0">
+          {hideStats ? (
+            <HiddenFighterStats compact />
+          ) : (
+            <>
+              <div className={`font-display font-bold text-base ${tier.color}`}>{fighter.current_skill}</div>
+              <div className="text-[10px] text-ink-500 uppercase">{tier.label}</div>
+            </>
+          )}
+        </div>
+      </div>
+      {footer && (
+        <div className="mt-2 pt-2 border-t border-ink-800/60 flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+          {footer}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -809,7 +809,7 @@ BEGIN
   SET status = 'completed', completed_at_week = v_tick
   WHERE id = p_event_id;
 
-  PERFORM public.refresh_promotion_rankings(v_event.promotion_id);
+  PERFORM public.refresh_promotion_rankings(v_tick);
 
   RETURN jsonb_build_object(
     'status', 'ok',

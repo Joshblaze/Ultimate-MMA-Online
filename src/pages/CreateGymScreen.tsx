@@ -47,22 +47,22 @@ export function CreateGymScreen() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen flex items-center justify-center px-4 py-8 sm:py-12 pt-safe pb-safe">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-gold-500 to-gold-700 shadow-belt mb-4">
-            <Dumbbell className="w-8 h-8 text-ink-950" />
+        <div className="text-center mb-6 sm:mb-8">
+          <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-gold-500 to-gold-700 shadow-belt mb-4">
+            <Dumbbell className="w-7 h-7 sm:w-8 sm:h-8 text-ink-950" />
           </div>
-          <h1 className="font-display text-3xl font-bold text-ink-100 mb-2">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-ink-100 mb-2">
             Found Your Gym
           </h1>
-          <p className="text-sm text-ink-400">
+          <p className="text-sm text-ink-400 px-2">
             Every legend starts somewhere. Name your new MMA gym to begin.
           </p>
         </div>
 
-        <div className="card p-6">
-          <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="card-glass p-5 sm:p-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 mb-6">
             <Stat label="Starting Cash" value={formatMoney(STARTING_CASH)} />
             <Stat label="Tier" value="1" />
             <Stat label="Capacity" value={`${STARTING_CAPACITY}`} />

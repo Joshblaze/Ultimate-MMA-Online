@@ -111,7 +111,7 @@ export function AdminPanel(_: PageProps) {
       {world && (
         <Card className="mb-6">
           <CardHeader title="World Status" icon={CalendarDays} />
-          <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <div className="stat-label">Current Date</div>
               <div className="stat-value text-ink-100">{world ? formatDate(world) : '—'}</div>
@@ -149,7 +149,7 @@ export function AdminPanel(_: PageProps) {
       {advanceResult && (
         <Card className="mb-6">
           <CardHeader title="Advance Result" icon={SkipForward} />
-          <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             <ResultStat label="New Tick" value={advanceResult.tick} />
             <ResultStat label="Retired" value={advanceResult.retired} />
             <ResultStat label="Status" value={advanceResult.status} />
