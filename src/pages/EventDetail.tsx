@@ -6,7 +6,7 @@ import {
   fetchEventDetail,
   fetchOwnedPromotion,
   fetchBookableFighters,
-  fetchEventPendingOffers,
+  fetchEventUnresolvedBookings,
   callAddEventFight,
   callRunEvent,
 } from '../lib/queries';
@@ -37,7 +37,7 @@ export function EventDetail({ params }: PageProps) {
   const [fights, setFights] = useState<FightRow[]>([]);
   const [ownedPromotion, setOwnedPromotion] = useState<Promotion | null>(null);
   const [bookableFighters, setBookableFighters] = useState<Fighter[]>([]);
-  const [pendingOffers, setPendingOffers] = useState<any[]>([]);
+  const [unresolvedBookings, setUnresolvedBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedFight, setExpandedFight] = useState<string | null>(null);
   const [fighterAId, setFighterAId] = useState('');
@@ -57,12 +57,12 @@ export function EventDetail({ params }: PageProps) {
       const [{ event: ev, fights: f }, promo, offers] = await Promise.all([
         fetchEventDetail(params.id),
         gym ? fetchOwnedPromotion(gym.id) : Promise.resolve(null),
-        fetchEventPendingOffers(params.id),
+        fetchEventUnresolvedBookings(params.id),
       ]);
       setEvent(ev);
       setFights(f as FightRow[]);
       setOwnedPromotion(promo);
-      setPendingOffers(offers);
+      setUnresolvedBookings(offers);
       if (promo && ev?.promotion_id === promo.id) {
         const roster = await fetchBookableFighters(promo.id);
         setBookableFighters(roster as Fighter[]);
@@ -133,6 +133,35 @@ export function EventDetail({ params }: PageProps) {
   }
 
   const promo = event.promotion;
+  const hasUnresolvedBookings = unresolvedBookings.length > 0;
+
+  function bookingSummary(groupKey: string, offers: typeof unresolvedBookings) {
+    const groupOffers = offers.filter((o) => (o.booking_group_id || o.id) === groupKey);
+    if (groupOffers.length === 0) return null;
+
+    const sample = groupOffers[0];
+    const fighterName = sample.fighter?.name || 'Fighter';
+    const opponentName = sample.opponent_fighter?.name || 'Opponent';
+
+    if (sample.booking_group_id && groupOffers.length > 1) {
+      const accepted = groupOffers.filter((o) => o.status === 'accepted');
+      const pending = groupOffers.filter((o) => o.status === 'pending');
+      if (accepted.length === 2) {
+        return `${fighterName} vs ${opponentName} — both gyms accepted, confirming bout`;
+      }
+      if (accepted.length === 1 && pending.length === 1) {
+        const waitingGym = pending[0]?.gym?.name || pending[0]?.fighter?.name || 'opponent gym';
+        return `${fighterName} vs ${opponentName} — awaiting ${waitingGym}`;
+      }
+      return `${fighterName} vs ${opponentName} — awaiting both gyms (${pending.length} pending)`;
+    }
+
+    return `${fighterName} vs ${opponentName} — offer pending`;
+  }
+
+  const bookingGroups = Array.from(
+    new Set(unresolvedBookings.map((o) => o.booking_group_id || o.id)),
+  );
   const filteredFighters = bookableFighters.filter(
     (f) => !fighterBId || f.id !== fighterBId,
   );
@@ -163,9 +192,9 @@ export function EventDetail({ params }: PageProps) {
             {canRun && (
               <button
                 onClick={handleRunEvent}
-                disabled={runningEvent || pendingOffers.length > 0}
+                disabled={runningEvent || hasUnresolvedBookings}
                 className="btn-primary text-sm"
-                title={pendingOffers.length > 0 ? 'Resolve pending offers first' : 'Simulate event'}
+                title={hasUnresolvedBookings ? 'Resolve pending offers first' : 'Simulate event'}
               >
                 {runningEvent ? <Spinner /> : <><Play className="w-4 h-4" /> Run Event</>}
               </button>
@@ -200,7 +229,7 @@ export function EventDetail({ params }: PageProps) {
           <div className="p-4 border-b border-ink-800">
             <h3 className="font-display font-semibold text-ink-100">Add Fight to Card</h3>
             <p className="text-xs text-ink-400 mt-1">
-              Unsigned fighters auto-accept. Player-managed fighters receive a 2-week offer.
+              Unsigned fighters auto-accept. One player gym gets a single offer; two player gyms each get an offer and both must accept.
               Book at least {EVENT_LEAD_WEEKS} weeks before the event date.
             </p>
           </div>
@@ -249,15 +278,14 @@ export function EventDetail({ params }: PageProps) {
         </Card>
       )}
 
-      {pendingOffers.length > 0 && (
+      {hasUnresolvedBookings && (
         <Card className="mb-6 p-4">
           <h3 className="font-display font-semibold text-ink-100 mb-2">Awaiting Gym Response</h3>
           <ul className="space-y-2 text-sm text-ink-300">
-            {pendingOffers.map((o) => (
-              <li key={o.id}>
-                {o.fighter?.name} vs {o.opponent_fighter?.name} — offer pending
-              </li>
-            ))}
+            {bookingGroups.map((groupKey) => {
+              const summary = bookingSummary(groupKey, unresolvedBookings);
+              return summary ? <li key={groupKey}>{summary}</li> : null;
+            })}
           </ul>
         </Card>
       )}

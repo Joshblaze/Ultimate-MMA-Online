@@ -194,6 +194,7 @@ export interface FightOffer {
   status: OfferStatus;
   offered_at_week: number; // absolute tick count; display via formatTick
   response_deadline_week: number; // absolute tick count; display via formatTick
+  booking_group_id: string | null;
 }
 
 export interface NewsItem {

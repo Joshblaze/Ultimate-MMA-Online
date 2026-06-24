@@ -382,14 +382,26 @@ export async function fetchPromotionEvents(promotionId: string, status?: string)
   return data || [];
 }
 
-export async function fetchEventPendingOffers(eventId: string) {
-  const { data, error } = await supabase
+export async function fetchEventUnresolvedBookings(eventId: string) {
+  const { data: offers, error } = await supabase
     .from('fight_offers')
-    .select('id, fighter_id, opponent_fighter_id, status, gym_id, fighter:fighters!fight_offers_fighter_id_fkey(id, name), opponent_fighter:fighters!fight_offers_opponent_fighter_id_fkey(id, name)')
+    .select('id, fighter_id, opponent_fighter_id, status, gym_id, booking_group_id, response_deadline_week, fighter:fighters!fight_offers_fighter_id_fkey(id, name), opponent_fighter:fighters!fight_offers_opponent_fighter_id_fkey(id, name), gym:gyms(id, name)')
+    .eq('event_id', eventId)
+    .in('status', ['pending', 'accepted'])
+    .not('opponent_fighter_id', 'is', null);
+  if (error) throw error;
+
+  const { data: fights, error: fightsError } = await supabase
+    .from('fights')
+    .select('id, fighter_a_id, fighter_b_id, status')
     .eq('event_id', eventId)
     .eq('status', 'pending');
-  if (error) throw error;
-  return data || [];
+  if (fightsError) throw fightsError;
+
+  return (offers || []).filter((offer) => !(fights || []).some((fight) =>
+    (fight.fighter_a_id === offer.fighter_id && fight.fighter_b_id === offer.opponent_fighter_id)
+    || (fight.fighter_a_id === offer.opponent_fighter_id && fight.fighter_b_id === offer.fighter_id),
+  ));
 }
 
 export async function fetchBookableFighters(promotionId: string) {

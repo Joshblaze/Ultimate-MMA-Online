@@ -25,6 +25,7 @@ interface OfferWithRelations {
   status: string;
   offered_at_week: number;
   response_deadline_week: number;
+  booking_group_id?: string | null;
   fighter?: { id: string; name: string; weight_class: string };
   opponent_fighter?: { id: string; name: string; weight_class: string; current_skill: number; gym_id?: string | null };
   opponent_rank?: number | null;
@@ -106,7 +107,6 @@ export function FightOffers() {
       const r = await callAcceptOffer(offer.id);
       setResult({ offerId: offer.id, status: r.status, message: r.message });
       if (r.status === 'ok') {
-        setOffers((prev) => prev.map((o) => o.id === offer.id ? { ...o, status: 'accepted' } : o));
         await refresh();
       }
     } catch (e) {
@@ -123,7 +123,7 @@ export function FightOffers() {
       const r = await callDeclineOffer(offer.id);
       setResult({ offerId: offer.id, status: r.status, message: r.message });
       if (r.status === 'ok') {
-        setOffers((prev) => prev.map((o) => o.id === offer.id ? { ...o, status: 'declined' } : o));
+        await refresh();
       }
     } catch (e) {
       setResult({ offerId: offer.id, status: 'error', message: (e as Error).message });
@@ -220,10 +220,14 @@ export function FightOffers() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filtered.map((offer) => {
             const fight = offer.event?.fights?.find((candidate) =>
-              candidate.fighter_a_id === offer.fighter_id
-              && candidate.fighter_b_id === offer.opponent_fighter_id
+              (candidate.fighter_a_id === offer.fighter_id
+                && candidate.fighter_b_id === offer.opponent_fighter_id)
+              || (candidate.fighter_a_id === offer.opponent_fighter_id
+                && candidate.fighter_b_id === offer.fighter_id)
             );
             const playerWon = fight?.winner_id === offer.fighter_id;
+            const isPvpBooking = Boolean(offer.booking_group_id && offer.opponent_fighter?.gym_id);
+            const awaitingOpponentGym = isPvpBooking && offer.status === 'accepted' && !fight;
             const isCompleted = offer.status === 'completed';
             const offerKind = offer.offer_kind || 'contract';
             const isRenewalOffer = offerKind === 'renewal';
@@ -251,12 +255,13 @@ export function FightOffers() {
                     </div>
                     <Badge className={
                       offer.status === 'pending' ? 'text-gold-300 bg-gold-700/30 border-gold-600/40' :
+                      awaitingOpponentGym ? 'text-gold-300 bg-gold-700/30 border-gold-600/40' :
                       offer.status === 'accepted' ? 'text-forest-300 bg-forest-700/30 border-forest-600/40' :
                       offer.status === 'completed' && playerWon ? 'text-forest-300 bg-forest-700/30 border-forest-600/40' :
                       offer.status === 'completed' ? 'text-blood-300 bg-blood-950/50 border-blood-800/50' :
                       'text-ink-400 bg-ink-800 border-ink-700'
                     }>
-                      {isCompleted ? (playerWon ? 'Win' : 'Loss') : offer.status}
+                      {isCompleted ? (playerWon ? 'Win' : 'Loss') : awaitingOpponentGym ? 'Awaiting opponent' : offer.status}
                     </Badge>
                   </div>
                   <div className="text-right">
@@ -381,6 +386,11 @@ export function FightOffers() {
                           {offer.promotion?.name || 'this promotion'}.
                           {offer.opponent_fighter ? ' The first fight will be booked on acceptance.' : ''}
                         </>
+                      ) : isPvpBooking ? (
+                        <>
+                          Both gyms must accept this bout before it is added to the card. Declining or letting the
+                          offer expire cancels the linked opponent offer as well.
+                        </>
                       ) : (
                         <>
                           This fight is under the current exclusive contract with{' '}
@@ -388,6 +398,11 @@ export function FightOffers() {
                           {offer.contract_fights === 1 ? '' : 's'} remaining before this bout.
                         </>
                       )}
+                    </div>
+                  )}
+                  {awaitingOpponentGym && (
+                    <div className="text-xs text-gold-300 bg-gold-950/30 border border-gold-800/40 rounded-lg p-2">
+                      You accepted this bout. Waiting for the opponent gym to accept before it is booked on the card.
                     </div>
                   )}
                 </div>
