@@ -521,6 +521,8 @@ DECLARE
   v_offer_id uuid;
   v_fight_id uuid;
   v_player_count int;
+  v_contract_fights int;
+  v_offer_kind text;
 BEGIN
   v_tick := public.get_current_week();
 
@@ -588,6 +590,8 @@ BEGIN
       AND c.weight_class = v_fa.weight_class;
   END IF;
 
+  v_offer_kind := CASE WHEN p_is_title_fight THEN 'title_shot' ELSE 'fight' END;
+
   IF v_player_count = 0 THEN
     INSERT INTO public.fights (event_id, fighter_a_id, fighter_b_id, weight_class, is_title_fight, championship_id, status)
     VALUES (p_event_id, p_fighter_a_id, p_fighter_b_id, v_fa.weight_class, p_is_title_fight, v_championship_id, 'pending')
@@ -602,10 +606,15 @@ BEGIN
   END IF;
 
   IF v_fa.gym_id IS NOT NULL THEN
-    IF NOT EXISTS (
-      SELECT 1 FROM public.contracts c
-      WHERE c.fighter_id = v_fa.id AND c.promotion_id = v_event.promo_id AND c.status = 'active'
-    ) THEN
+    SELECT c.fights_remaining INTO v_contract_fights
+    FROM public.contracts c
+    WHERE c.fighter_id = v_fa.id
+      AND c.promotion_id = v_event.promo_id
+      AND c.status = 'active'
+    ORDER BY c.signed_week DESC, c.id DESC
+    LIMIT 1;
+
+    IF NOT FOUND OR v_contract_fights IS NULL THEN
       RETURN jsonb_build_object('status', 'error', 'message', 'Player fighter must have an active promotion contract before fight offers.');
     END IF;
 
@@ -615,8 +624,12 @@ BEGIN
     ) VALUES (
       v_fa.gym_id, v_fa.id, v_fb.id, v_event.promo_id, p_event_id,
       p_purse, v_event.scheduled_week, 'pending', v_tick, v_tick + 2,
-      CASE WHEN p_is_title_fight THEN 'title_shot' ELSE 'fight' END, 0
+      v_offer_kind, GREATEST(1, v_contract_fights)
     ) RETURNING id INTO v_offer_id;
+
+    IF v_offer_id IS NULL THEN
+      RETURN jsonb_build_object('status', 'error', 'message', 'Fight offer could not be created.');
+    END IF;
 
     RETURN jsonb_build_object(
       'status', 'ok',
@@ -627,10 +640,15 @@ BEGIN
   END IF;
 
   IF v_fb.gym_id IS NOT NULL THEN
-    IF NOT EXISTS (
-      SELECT 1 FROM public.contracts c
-      WHERE c.fighter_id = v_fb.id AND c.promotion_id = v_event.promo_id AND c.status = 'active'
-    ) THEN
+    SELECT c.fights_remaining INTO v_contract_fights
+    FROM public.contracts c
+    WHERE c.fighter_id = v_fb.id
+      AND c.promotion_id = v_event.promo_id
+      AND c.status = 'active'
+    ORDER BY c.signed_week DESC, c.id DESC
+    LIMIT 1;
+
+    IF NOT FOUND OR v_contract_fights IS NULL THEN
       RETURN jsonb_build_object('status', 'error', 'message', 'Player fighter must have an active promotion contract before fight offers.');
     END IF;
 
@@ -640,8 +658,12 @@ BEGIN
     ) VALUES (
       v_fb.gym_id, v_fb.id, v_fa.id, v_event.promo_id, p_event_id,
       p_purse, v_event.scheduled_week, 'pending', v_tick, v_tick + 2,
-      CASE WHEN p_is_title_fight THEN 'title_shot' ELSE 'fight' END, 0
+      v_offer_kind, GREATEST(1, v_contract_fights)
     ) RETURNING id INTO v_offer_id;
+
+    IF v_offer_id IS NULL THEN
+      RETURN jsonb_build_object('status', 'error', 'message', 'Fight offer could not be created.');
+    END IF;
 
     RETURN jsonb_build_object(
       'status', 'ok',
