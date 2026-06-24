@@ -128,7 +128,8 @@ Deno.serve(async (req: Request) => {
           result = { action, status: 'error', message: 'promotionId and gymId are required.' };
           break;
         }
-        const { data, error } = await admin.rpc('assign_promotion_owner', {
+        // Use userClient so assign_promotion_owner sees auth.uid() for is_admin()
+        const { data, error } = await userClient.rpc('assign_promotion_owner', {
           p_promotion_id: body.promotionId,
           p_gym_id: body.gymId,
         });

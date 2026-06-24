@@ -7,6 +7,7 @@ import { navigate } from '../App';
 import { useGym } from '../lib/gym';
 import { useWorld } from '../lib/world';
 import { Card, CardHeader, EmptyState, PageHeader, Spinner, Badge, Alert } from '../components/ui';
+import { FighterSearchPicker } from '../components/FighterSearchPicker';
 import {
   fetchOwnedPromotion,
   fetchPromotionEvents,
@@ -198,20 +199,12 @@ export function ManagePromotion(_: PageProps) {
             </p>
             <div>
               <label className="label">Fighter</label>
-              <select
-                className="input"
+              <FighterSearchPicker
+                fighters={fighters}
                 value={contractFighterId}
-                onChange={(e) => setContractFighterId(e.target.value)}
-                required
-              >
-                <option value="">Select fighter...</option>
-                {fighters.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name} · {f.weight_class} · Skill {f.current_skill}
-                    {f.gym_id ? ' (player)' : ''}
-                  </option>
-                ))}
-              </select>
+                onChange={setContractFighterId}
+                placeholder="Search fighter name or weight class..."
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
