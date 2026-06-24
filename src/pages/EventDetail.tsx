@@ -15,7 +15,29 @@ import { PROMOTION_TIER_NAMES, PROMOTION_TIER_COLORS, EVENT_LEAD_WEEKS } from '.
 import { navigate } from '../App';
 import { useGym } from '../lib/gym';
 import { useWorld } from '../lib/world';
-import type { Fighter, Promotion } from '../lib/types';
+import type { Fighter, Promotion, FightStatus } from '../lib/types';
+
+function fightStatusBadge(status: string, currentRound: number) {
+  const labels: Record<string, string> = {
+    pending: 'Scheduled',
+    awaiting_plans: currentRound === 0 ? 'Awaiting plans' : `Plan for R${currentRound + 1}`,
+    in_progress: 'Live',
+    between_rounds: `After R${currentRound}`,
+    completed: 'Final',
+  };
+  const colors: Record<string, string> = {
+    pending: 'text-ink-400 bg-ink-800/60 border-ink-700/40',
+    awaiting_plans: 'text-gold-300 bg-gold-700/20 border-gold-600/40',
+    in_progress: 'text-blood-200 bg-blood-700/30 border-blood-600/40',
+    between_rounds: 'text-gold-300 bg-gold-700/20 border-gold-600/40',
+    completed: 'text-forest-300 bg-forest-700/30 border-forest-600/40',
+  };
+  return (
+    <Badge className={colors[status] || colors.pending}>
+      {labels[status] || status}
+    </Badge>
+  );
+}
 
 interface FightRow {
   id: string;
@@ -23,7 +45,8 @@ interface FightRow {
   method: string | null;
   round: number | null;
   is_title_fight: boolean;
-  status: string;
+  status: FightStatus;
+  current_round?: number;
   commentary: string[] | null;
   fighter_a?: { id: string; name: string; country: string; wins: number; losses: number; gym_id?: string | null };
   fighter_b?: { id: string; name: string; country: string; wins: number; losses: number; gym_id?: string | null };
@@ -49,10 +72,14 @@ export function EventDetail({ params }: PageProps) {
   const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
 
   const isOwner = ownedPromotion && event?.promotion_id === ownedPromotion.id;
-  const canRun = isOwner && event?.status === 'scheduled' && world && world.tick_count >= event.scheduled_week;
+  const canStart = isOwner && event?.status === 'scheduled' && world && world.tick_count >= event.scheduled_week;
+  const isLive = event?.status === 'live';
+  const activeFight = fights.find((f) =>
+    ['awaiting_plans', 'in_progress', 'between_rounds'].includes(f.status),
+  );
 
-  async function load() {
-    setLoading(true);
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
     try {
       const [{ event: ev, fights: f }, promo, offers] = await Promise.all([
         fetchEventDetail(params.id),
@@ -70,13 +97,19 @@ export function EventDetail({ params }: PageProps) {
     } catch (e) {
       console.error('Failed to load event:', (e as Error).message);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => {
     load();
   }, [params.id, gym?.id, world?.tick_count]);
+
+  useEffect(() => {
+    if (!isLive) return;
+    const interval = setInterval(() => load(true), 5000);
+    return () => clearInterval(interval);
+  }, [isLive, params.id, gym?.id]);
 
   async function handleAddFight(e: React.FormEvent) {
     e.preventDefault();
@@ -98,13 +131,13 @@ export function EventDetail({ params }: PageProps) {
     }
   }
 
-  async function handleRunEvent() {
+  async function handleStartEvent() {
     setRunningEvent(true);
     setMessage(null);
     try {
       const r = await callRunEvent(params.id);
-      if (r.status !== 'ok') throw new Error(r.message || 'Failed to run event.');
-      setMessage({ kind: 'success', text: r.message || 'Event completed.' });
+      if (r.status !== 'ok') throw new Error(r.message || 'Failed to start event.');
+      setMessage({ kind: 'success', text: r.message || 'Event started.' });
       await refreshWorld();
       await load();
     } catch (err) {
@@ -180,7 +213,10 @@ export function EventDetail({ params }: PageProps) {
 
       <PageHeader
         title={event.name}
-        subtitle={`${formatTick(event.scheduled_week)} · ${event.status === 'completed' ? 'Completed' : 'Scheduled'}`}
+        subtitle={`${formatTick(event.scheduled_week)} · ${
+          event.status === 'completed' ? 'Completed' :
+          event.status === 'live' ? 'Live' : 'Scheduled'
+        }`}
         icon={CalendarDays}
         action={
           <div className="flex items-center gap-2">
@@ -189,14 +225,22 @@ export function EventDetail({ params }: PageProps) {
                 {PROMOTION_TIER_NAMES[promo.tier]}
               </Badge>
             )}
-            {canRun && (
+            {canStart && (
               <button
-                onClick={handleRunEvent}
+                onClick={handleStartEvent}
                 disabled={runningEvent || hasUnresolvedBookings}
                 className="btn-primary text-sm"
-                title={hasUnresolvedBookings ? 'Resolve pending offers first' : 'Simulate event'}
+                title={hasUnresolvedBookings ? 'Resolve pending offers first' : 'Start event card'}
               >
-                {runningEvent ? <Spinner /> : <><Play className="w-4 h-4" /> Run Event</>}
+                {runningEvent ? <Spinner /> : <><Play className="w-4 h-4" /> Start Event</>}
+              </button>
+            )}
+            {isLive && activeFight && (
+              <button
+                onClick={() => navigate(`fight/${activeFight.id}`)}
+                className="btn-primary text-sm"
+              >
+                <Play className="w-4 h-4" /> Watch Live
               </button>
             )}
           </div>
@@ -328,7 +372,7 @@ export function EventDetail({ params }: PageProps) {
                         </button>
                       </div>
                     </div>
-                    <div className="text-right flex-shrink-0">
+                    <div className="text-right flex-shrink-0 flex flex-col items-end gap-1">
                       {fight.status === 'completed' ? (
                         <>
                           <div className="text-sm text-gold-300 font-medium">
@@ -337,35 +381,56 @@ export function EventDetail({ params }: PageProps) {
                           <div className="text-xs text-ink-500">{fight.weight_class}</div>
                         </>
                       ) : (
-                        <Badge className="text-forest-300 bg-forest-700/30 border-forest-600/40">
-                          {fight.weight_class}
-                        </Badge>
+                        <>
+                          {fightStatusBadge(fight.status, fight.current_round ?? 0)}
+                          <div className="text-xs text-ink-500">{fight.weight_class}</div>
+                        </>
+                      )}
+                      {fight.status !== 'pending' && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); navigate(`fight/${fight.id}`); }}
+                          className="text-xs text-gold-400 hover:text-gold-300 mt-1"
+                        >
+                          {fight.status === 'completed' ? 'Full recap' : 'Watch fight →'}
+                        </button>
                       )}
                     </div>
                   </div>
                 </div>
 
-                {expanded && commentary.length > 0 && (
+                {expanded && (
                   <div className="border-t border-ink-800 p-4 bg-ink-900/40 animate-slideUp">
-                    <div className="text-xs text-ink-500 uppercase tracking-wide font-semibold mb-2">
-                      Fight Commentary
-                    </div>
-                    <div className="space-y-1.5">
-                      {commentary.map((line, i) => (
-                        <div key={i} className="text-sm text-ink-300 flex gap-2">
-                          <span className="text-ink-600">{i + 1}.</span>
-                          <span>{line}</span>
+                    {commentary.length > 0 && (
+                      <>
+                        <div className="text-xs text-ink-500 uppercase tracking-wide font-semibold mb-2">
+                          Fight Summary
                         </div>
-                      ))}
-                      {fight.winner && (
-                        <div className="mt-2 pt-2 border-t border-ink-800 flex items-center gap-2 text-sm">
-                          <Trophy className="w-4 h-4 text-gold-400" />
-                          <span className="text-gold-300 font-semibold">
-                            {fight.winner.name} wins by {fight.method} in round {fight.round}
-                          </span>
+                        <div className="space-y-1.5 mb-3">
+                          {commentary.map((line, i) => (
+                            <div key={i} className="text-sm text-ink-300 flex gap-2">
+                              <span className="text-ink-600">{i + 1}.</span>
+                              <span>{line}</span>
+                            </div>
+                          ))}
                         </div>
-                      )}
-                    </div>
+                      </>
+                    )}
+                    {fight.status !== 'pending' && (
+                      <button
+                        onClick={() => navigate(`fight/${fight.id}`)}
+                        className="text-sm text-gold-400 hover:text-gold-300"
+                      >
+                        Open fight viewer →
+                      </button>
+                    )}
+                    {fight.winner && (
+                      <div className="mt-2 pt-2 border-t border-ink-800 flex items-center gap-2 text-sm">
+                        <Trophy className="w-4 h-4 text-gold-400" />
+                        <span className="text-gold-300 font-semibold">
+                          {fight.winner.name} wins by {fight.method} in round {fight.round}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </Card>

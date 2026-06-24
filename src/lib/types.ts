@@ -15,9 +15,20 @@ export type CareerStatus = 'prospect' | 'contender' | 'champion' | 'veteran' | '
 
 export type FightMethod = 'KO' | 'TKO' | 'Submission' | 'Decision';
 
-export type FightStatus = 'pending' | 'completed';
+export type FightStatus = 'pending' | 'awaiting_plans' | 'in_progress' | 'between_rounds' | 'completed';
 
-export type EventStatus = 'scheduled' | 'completed';
+export type EventStatus = 'scheduled' | 'live' | 'completed';
+
+export type GamePlanPreset = 'striker' | 'grappler' | 'counter' | 'volume';
+
+export type FightEventType =
+  | 'intro'
+  | 'strike'
+  | 'takedown'
+  | 'submission_attempt'
+  | 'knockdown'
+  | 'round_end'
+  | 'finish';
 
 export type OfferStatus = 'pending' | 'accepted' | 'declined' | 'completed';
 export type OfferKind = 'contract' | 'fight' | 'renewal' | 'title_shot';
@@ -165,6 +176,56 @@ export interface Fight {
   championship_id: string | null;
   status: FightStatus;
   completed_at_week: number | null; // absolute tick count; display via formatTick
+  current_round: number;
+  max_rounds: number | null;
+  fight_state: FightState;
+  card_order: number | null;
+}
+
+export interface FightCornerState {
+  stamina: number;
+  damage: number;
+  rounds_won: number;
+  round_damage: number;
+}
+
+export interface FightState {
+  a: FightCornerState;
+  b: FightCornerState;
+}
+
+export interface FightEvent {
+  id: string;
+  fight_id: string;
+  sequence: number;
+  round: number;
+  event_type: FightEventType;
+  actor_fighter_id: string | null;
+  target_fighter_id: string | null;
+  detail: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface FightGamePlan {
+  id: string;
+  fight_id: string;
+  fighter_id: string;
+  gym_id: string | null;
+  for_round: number;
+  preset: GamePlanPreset;
+  pressure: number;
+  distance: number;
+  takedown_freq: number;
+  risk: number;
+  submitted_at: string;
+}
+
+export interface FightGamePlanInput {
+  preset: GamePlanPreset;
+  pressure: number;
+  distance: number;
+  takedown_freq: number;
+  risk: number;
 }
 
 export interface Contract {
@@ -303,6 +364,19 @@ export interface Database {
         Returns: unknown;
       };
       run_event: { Args: { p_event_id: string }; Returns: unknown };
+      start_event: { Args: { p_event_id: string }; Returns: unknown };
+      submit_fight_game_plan: {
+        Args: {
+          p_fight_id: string;
+          p_fighter_id: string;
+          p_preset: string;
+          p_pressure: number;
+          p_distance: number;
+          p_takedown_freq: number;
+          p_risk: number;
+        };
+        Returns: unknown;
+      };
       get_owned_promotion: { Args: { p_gym_id?: string }; Returns: string | null };
       is_admin: { Args: Record<string, never>; Returns: boolean };
       get_current_week: { Args: Record<string, never>; Returns: number };

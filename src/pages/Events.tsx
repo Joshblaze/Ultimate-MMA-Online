@@ -34,6 +34,7 @@ export function Events(_: PageProps) {
 
   const filtered = (events || []).filter((e) => {
     if (filter === 'all') return true;
+    if (filter === 'scheduled') return e.status === 'scheduled' || e.status === 'live';
     return e.status === filter;
   });
 
@@ -46,7 +47,7 @@ export function Events(_: PageProps) {
     <div className="animate-slideUp">
       <PageHeader
         title="Events"
-        subtitle={`${events.filter((e) => e.status === 'scheduled').length} upcoming · ${events.filter((e) => e.status === 'completed').length} completed`}
+        subtitle={`${events.filter((e) => e.status === 'scheduled' || e.status === 'live').length} upcoming · ${events.filter((e) => e.status === 'completed').length} completed`}
         icon={CalendarDays}
       />
 
@@ -59,7 +60,7 @@ export function Events(_: PageProps) {
           >
             {f === 'all' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}
             <span className="text-xs opacity-70 ml-1">
-              ({events.filter((e) => f === 'all' || e.status === f).length})
+              ({events.filter((e) => f === 'all' || e.status === f || (f === 'scheduled' && e.status === 'live')).length})
             </span>
           </button>
         ))}
@@ -88,8 +89,12 @@ export function Events(_: PageProps) {
                       </button>
                     )}
                   </div>
-                  <Badge className={e.status === 'completed' ? 'text-ink-400 bg-ink-800 border-ink-700' : 'text-forest-300 bg-forest-700/30 border-forest-600/40'}>
-                    {e.status}
+                  <Badge className={
+                    e.status === 'completed' ? 'text-ink-400 bg-ink-800 border-ink-700' :
+                    e.status === 'live' ? 'text-blood-200 bg-blood-700/30 border-blood-600/40' :
+                    'text-forest-300 bg-forest-700/30 border-forest-600/40'
+                  }>
+                    {e.status === 'live' ? 'Live' : e.status}
                   </Badge>
                 </div>
                 {promo && (
@@ -99,7 +104,7 @@ export function Events(_: PageProps) {
                 )}
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-ink-800 text-xs">
                   <span className="text-ink-500">
-                    {e.status === 'scheduled' ? 'Scheduled' : 'Held'}{' '}
+                    {e.status === 'scheduled' ? 'Scheduled' : e.status === 'live' ? 'Live now' : 'Held'}{' '}
                     {formatTick(e.status === 'completed' && e.completed_at_week != null ? e.completed_at_week : e.scheduled_week)}
                   </span>
                   {fightCount > 0 && <span className="text-ink-400">{fightCount} fight{fightCount !== 1 ? 's' : ''}</span>}

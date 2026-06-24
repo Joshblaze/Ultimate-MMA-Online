@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 import type {
   Fighter, Gym, Promotion, Championship, TitleHistory, Ranking,
   GameEvent, Fight, Contract, FightOffer, NewsItem, WorldState,
-  WeightClass,
+  WeightClass, FightEvent, FightGamePlan, FightGamePlanInput, FightState,
 } from './types';
 
 export async function fetchWorldState(): Promise<WorldState | null> {
@@ -51,7 +51,7 @@ export async function fetchFighter(id: string, options?: { withHistory?: boolean
     .from('fights')
     .select(fightSelect)
     .or(`fighter_a_id.eq.${id},fighter_b_id.eq.${id}`)
-    .eq('status', 'pending')
+    .in('status', ['pending', 'awaiting_plans', 'in_progress', 'between_rounds'])
     .order('scheduled_week', { ascending: true, referencedTable: 'event' });
 
   const contractsQ = supabase
@@ -292,8 +292,8 @@ export async function fetchEventDetail(id: string) {
     supabase.from('fights')
       .select('*, fighter_a:fighters!fights_fighter_a_id_fkey(id, name, country, wins, losses, gym_id), fighter_b:fighters!fights_fighter_b_id_fkey(id, name, country, wins, losses, gym_id), winner:fighters!fights_winner_id_fkey(id, name)')
       .eq('event_id', id)
+      .order('card_order', { ascending: true, nullsFirst: false })
       .order('is_title_fight', { ascending: false })
-      .order('round', { ascending: false }),
   ]);
   if (eventQ.error) throw eventQ.error;
   if (fightsQ.error) throw fightsQ.error;
@@ -458,9 +458,143 @@ export async function callSendContractOffer(
 }
 
 export async function callRunEvent(eventId: string) {
-  const { data, error } = await supabase.rpc('run_event', { p_event_id: eventId } as any);
+  const { data, error } = await supabase.rpc('start_event', { p_event_id: eventId } as any);
   if (error) throw error;
-  return data as { status: string; message?: string; fights_simulated?: number };
+  return data as { status: string; message?: string; event_status?: string };
+}
+
+export async function callStartEvent(eventId: string) {
+  return callRunEvent(eventId);
+}
+
+export async function callSubmitFightGamePlan(
+  fightId: string,
+  fighterId: string,
+  plan: FightGamePlanInput,
+) {
+  const { data, error } = await supabase.rpc('submit_fight_game_plan', {
+    p_fight_id: fightId,
+    p_fighter_id: fighterId,
+    p_preset: plan.preset,
+    p_pressure: plan.pressure,
+    p_distance: plan.distance,
+    p_takedown_freq: plan.takedown_freq,
+    p_risk: plan.risk,
+  } as any);
+  if (error) throw error;
+  return data as { status: string; message?: string; for_round?: number };
+}
+
+const FIGHT_DETAIL_SELECT = `
+  *,
+  event:events(id, name, promotion_id, scheduled_week, status, completed_at_week,
+    promotion:promotions(id, name, tier)),
+  fighter_a:fighters!fights_fighter_a_id_fkey(
+    id, name, country, wins, losses, gym_id, boxing, kickboxing, wrestling, bjj, cardio, chin, fight_iq, athleticism
+  ),
+  fighter_b:fighters!fights_fighter_b_id_fkey(
+    id, name, country, wins, losses, gym_id, boxing, kickboxing, wrestling, bjj, cardio, chin, fight_iq, athleticism
+  ),
+  winner:fighters!fights_winner_id_fkey(id, name)
+`;
+
+export async function fetchFightDetail(fightId: string) {
+  const [fightRes, eventsRes, plansRes] = await Promise.all([
+    supabase.from('fights').select(FIGHT_DETAIL_SELECT).eq('id', fightId).maybeSingle(),
+    supabase.from('fight_events').select('*').eq('fight_id', fightId).order('sequence', { ascending: true }),
+    supabase.from('fight_game_plans').select('*').eq('fight_id', fightId).order('for_round', { ascending: true }),
+  ]);
+  if (fightRes.error) throw fightRes.error;
+  if (eventsRes.error) throw eventsRes.error;
+  if (plansRes.error) throw plansRes.error;
+
+  return {
+    fight: fightRes.data,
+    events: (eventsRes.data || []) as FightEvent[],
+    plans: (plansRes.data || []) as FightGamePlan[],
+  };
+}
+
+export async function fetchFightEvents(fightId: string) {
+  const { data, error } = await supabase
+    .from('fight_events')
+    .select('*')
+    .eq('fight_id', fightId)
+    .order('sequence', { ascending: true });
+  if (error) throw error;
+  return (data || []) as FightEvent[];
+}
+
+export async function fetchGymFightsNeedingPlans(gymId: string) {
+  const fighters = await fetchGymFighters(gymId);
+  const fighterIds = fighters.map((f) => f.id);
+  if (fighterIds.length === 0) return [];
+
+  const idList = fighterIds.join(',');
+  const { data, error } = await supabase
+    .from('fights')
+    .select(`
+      id, status, current_round, weight_class, is_title_fight, event_id,
+      event:events(id, name, status),
+      fighter_a:fighters!fights_fighter_a_id_fkey(id, name, gym_id),
+      fighter_b:fighters!fights_fighter_b_id_fkey(id, name, gym_id)
+    `)
+    .in('status', ['awaiting_plans', 'between_rounds'])
+    .or(`fighter_a_id.in.(${idList}),fighter_b_id.in.(${idList})`);
+  if (error) throw error;
+
+  const fights = data || [];
+  const needing: Array<{
+    fight: typeof fights[number];
+    myFighter: { id: string; name: string };
+    forRound: number;
+  }> = [];
+
+  for (const fight of fights) {
+    const fa = fight.fighter_a as { id: string; name: string; gym_id: string | null } | null;
+    const fb = fight.fighter_b as { id: string; name: string; gym_id: string | null } | null;
+    const forRound = (fight.current_round as number) + 1;
+    let myFighter: { id: string; name: string } | null = null;
+
+    if (fa?.gym_id === gymId) myFighter = fa;
+    else if (fb?.gym_id === gymId) myFighter = fb;
+    if (!myFighter) continue;
+
+    const { data: plan } = await supabase
+      .from('fight_game_plans')
+      .select('id')
+      .eq('fight_id', fight.id)
+      .eq('fighter_id', myFighter.id)
+      .eq('for_round', forRound)
+      .maybeSingle();
+
+    if (!plan) {
+      needing.push({ fight, myFighter, forRound });
+    }
+  }
+
+  return needing;
+}
+
+export function parseFightState(raw: unknown): FightState {
+  const empty: FightState = {
+    a: { stamina: 100, damage: 0, rounds_won: 0, round_damage: 0 },
+    b: { stamina: 100, damage: 0, rounds_won: 0, round_damage: 0 },
+  };
+  if (!raw || typeof raw !== 'object') return empty;
+  const s = raw as Record<string, unknown>;
+  const corner = (key: 'a' | 'b'): FightState['a'] => {
+    const c = s[key];
+    if (!c || typeof c !== 'object') return empty[key];
+    const o = c as Record<string, number>;
+    return {
+      stamina: o.stamina ?? 100,
+      damage: o.damage ?? 0,
+      rounds_won: o.rounds_won ?? 0,
+      round_damage: o.round_damage ?? 0,
+    };
+  };
+  return { a: corner('a'), b: corner('b') };
 }
 
 export async function callAdminAssignPromotion(promotionId: string, gymId: string) {
@@ -560,4 +694,4 @@ export async function fetchRankings(promotionId?: string) {
   }));
 }
 
-export type { Fighter, Gym, Promotion, Championship, TitleHistory, Ranking, GameEvent, Fight, Contract, FightOffer, NewsItem };
+export type { Fighter, Gym, Promotion, Championship, TitleHistory, Ranking, GameEvent, Fight, Contract, FightOffer, NewsItem, FightEvent, FightGamePlan, FightGamePlanInput };

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Dumbbell, Trophy, Users, Crown, FileText, Newspaper, Wallet, TrendingUp,
-  Swords, ChevronRight, Sparkles, Calendar,
+  Swords, ChevronRight, Sparkles, Calendar, Target,
 } from 'lucide-react';
 import { useGym } from '../lib/gym';
 import { useWorld } from '../lib/world';
@@ -11,6 +11,7 @@ import { FighterRow, FighterListItem } from '../components/FighterCard';
 import { ResponsiveDataView } from '../components/ResponsiveDataView';
 import {
   fetchGymFighters, fetchGymOffers, fetchRecentNews, fetchGymRecentFights,
+  fetchGymFightsNeedingPlans,
 } from '../lib/queries';
 import { formatMoney, formatDate, formatRecord, formatTick } from '../lib/format';
 import type { Fighter, FightOffer, NewsItem } from '../lib/types';
@@ -23,6 +24,7 @@ export function Dashboard(_: PageProps) {
   const [offers, setOffers] = useState<FightOffer[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [recentFights, setRecentFights] = useState<any[]>([]);
+  const [plansNeeded, setPlansNeeded] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,11 +34,12 @@ export function Dashboard(_: PageProps) {
     setLoading(true);
 
     async function loadDashboard() {
-      const [fightersResult, offersResult, newsResult, fightsResult] = await Promise.allSettled([
+      const [fightersResult, offersResult, newsResult, fightsResult, plansResult] = await Promise.allSettled([
         fetchGymFighters(gymId),
         fetchGymOffers(gymId),
         fetchRecentNews(5),
         fetchGymRecentFights(gymId, 5),
+        fetchGymFightsNeedingPlans(gymId),
       ]);
 
       if (cancelled) return;
@@ -55,6 +58,9 @@ export function Dashboard(_: PageProps) {
 
       if (fightsResult.status === 'fulfilled') setRecentFights(fightsResult.value);
       else console.error('Dashboard recent fights error:', fightsResult.reason);
+
+      if (plansResult.status === 'fulfilled') setPlansNeeded(plansResult.value);
+      else console.error('Dashboard plans needed error:', plansResult.reason);
 
       setLoading(false);
     }
@@ -79,6 +85,31 @@ export function Dashboard(_: PageProps) {
           </Badge>
         }
       />
+
+      {plansNeeded.length > 0 && (
+        <Card className="mb-6 border-gold-700/40">
+          <CardHeader title="Game Plan Needed" icon={Target} />
+          <div className="divide-y divide-ink-800">
+            {plansNeeded.map(({ fight, myFighter, forRound }) => (
+              <button
+                key={fight.id}
+                onClick={() => navigate(`fight/${fight.id}`)}
+                className="p-4 w-full text-left hover:bg-ink-800/30 flex items-center justify-between gap-3"
+              >
+                <div>
+                  <div className="text-sm font-medium text-gold-200">
+                    {myFighter.name} — Round {forRound}
+                  </div>
+                  <div className="text-xs text-ink-400 mt-0.5">
+                    {(fight.event as { name?: string } | null)?.name || 'Live event'} · Submit corner instructions
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-gold-400 flex-shrink-0" />
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Stats grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
@@ -205,7 +236,7 @@ export function Dashboard(_: PageProps) {
                     <div
                       key={fight.id}
                       className="flex items-center justify-between p-3 hover:bg-ink-800/30 cursor-pointer"
-                      onClick={() => fight.event_id && navigate(`events/${fight.event_id}`)}
+                      onClick={() => fight.event_id && navigate(`fight/${fight.id}`)}
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <span className={`badge ${won ? 'bg-forest-700/40 text-forest-200' : 'bg-blood-700/40 text-blood-200'}`}>

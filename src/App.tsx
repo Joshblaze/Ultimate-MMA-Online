@@ -20,7 +20,7 @@ const PromotionProfile = lazy(() => import('./pages/PromotionProfile').then((m) 
 const Championships = lazy(() => import('./pages/Championships').then((m) => ({ default: m.Championships })));
 const Rankings = lazy(() => import('./pages/Rankings').then((m) => ({ default: m.Rankings })));
 const Events = lazy(() => import('./pages/Events').then((m) => ({ default: m.Events })));
-const EventDetail = lazy(() => import('./pages/EventDetail').then((m) => ({ default: m.EventDetail })));
+const FightViewer = lazy(() => import('./pages/FightViewer').then((m) => ({ default: m.FightViewer })));
 const WorldNews = lazy(() => import('./pages/WorldNews').then((m) => ({ default: m.WorldNews })));
 const Leaderboard = lazy(() => import('./pages/Leaderboard').then((m) => ({ default: m.Leaderboard })));
 const AdminPanel = lazy(() => import('./pages/AdminPanel').then((m) => ({ default: m.AdminPanel })));
@@ -51,6 +51,7 @@ const routes: Route[] = [
   { path: 'rankings', component: Rankings, requiresGym: true, adminOnly: false },
   { path: 'events', component: Events, requiresGym: true, adminOnly: false },
   { path: 'events/:id', component: EventDetail, requiresGym: true, adminOnly: false },
+  { path: 'fight/:id', component: FightViewer, requiresGym: true, adminOnly: false },
   { path: 'world-news', component: WorldNews, requiresGym: true, adminOnly: false },
   { path: 'leaderboard', component: Leaderboard, requiresGym: true, adminOnly: false },
   { path: 'admin', component: AdminPanel, requiresGym: true, adminOnly: true },
